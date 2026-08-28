@@ -78,6 +78,9 @@ dependencies {
     implementation("androidx.compose.material:material-icons-extended")
     implementation("androidx.navigation:navigation-compose:2.8.5")
 
+    // Chrome Custom Tabs (OAuth2 browser sign-in)
+    implementation("androidx.browser:browser:1.8.0")
+
     // Networking (single-endpoint API client)
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
 

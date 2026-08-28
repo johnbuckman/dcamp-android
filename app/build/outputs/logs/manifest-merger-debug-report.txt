@@ -1,15 +1,16 @@
 -- Merging decision tree log ---
 manifest
-ADDED from /Users/john/code/dcamp-android/app/src/main/AndroidManifest.xml:2:1-28:12
-INJECTED from /Users/john/code/dcamp-android/app/src/main/AndroidManifest.xml:2:1-28:12
-INJECTED from /Users/john/code/dcamp-android/app/src/main/AndroidManifest.xml:2:1-28:12
-INJECTED from /Users/john/code/dcamp-android/app/src/main/AndroidManifest.xml:2:1-28:12
+ADDED from /Users/john/code/dcamp-android/app/src/main/AndroidManifest.xml:2:1-36:12
+INJECTED from /Users/john/code/dcamp-android/app/src/main/AndroidManifest.xml:2:1-36:12
+INJECTED from /Users/john/code/dcamp-android/app/src/main/AndroidManifest.xml:2:1-36:12
+INJECTED from /Users/john/code/dcamp-android/app/src/main/AndroidManifest.xml:2:1-36:12
 MERGED from [io.coil-kt:coil-compose:2.7.0] /Users/john/.gradle/caches/8.13/transforms/7ea01a3c2268de07cd3aba4bdd805114/transformed/coil-compose-2.7.0/AndroidManifest.xml:2:1-7:12
 MERGED from [io.coil-kt:coil-compose-base:2.7.0] /Users/john/.gradle/caches/8.13/transforms/1f9ca55a9470f1714044b89f58a80449/transformed/coil-compose-base-2.7.0/AndroidManifest.xml:2:1-7:12
 MERGED from [io.coil-kt:coil:2.7.0] /Users/john/.gradle/caches/8.13/transforms/b46100ef11ecfa29632089bb1bcd6c93/transformed/coil-2.7.0/AndroidManifest.xml:2:1-7:12
 MERGED from [io.coil-kt:coil-base:2.7.0] /Users/john/.gradle/caches/8.13/transforms/5b14c86d1077f0bacd2b94bb2efa4335/transformed/coil-base-2.7.0/AndroidManifest.xml:2:1-7:12
 MERGED from [androidx.appcompat:appcompat-resources:1.7.0] /Users/john/.gradle/caches/8.13/transforms/d68a0a4c6d3cd2815d9d0b675c0bc4de/transformed/appcompat-resources-1.7.0/AndroidManifest.xml:2:1-7:12
 MERGED from [androidx.appcompat:appcompat:1.7.0] /Users/john/.gradle/caches/8.13/transforms/36f23e5dfc5c3eb209ddbbb11d48c623/transformed/appcompat-1.7.0/AndroidManifest.xml:2:1-7:12
+MERGED from [androidx.browser:browser:1.8.0] /Users/john/.gradle/caches/8.13/transforms/64cfea1cea5a33a2bc02a6bb68c37965/transformed/browser-1.8.0/AndroidManifest.xml:2:1-7:12
 MERGED from [androidx.webkit:webkit:1.12.1] /Users/john/.gradle/caches/8.13/transforms/6c717c71dda3b20088b7a56414160a89/transformed/webkit-1.12.1/AndroidManifest.xml:2:1-7:12
 MERGED from [androidx.drawerlayout:drawerlayout:1.0.0] /Users/john/.gradle/caches/8.13/transforms/e9c7ebe613adc4264ce6023982ee208b/transformed/drawerlayout-1.0.0/AndroidManifest.xml:17:1-22:12
 MERGED from [androidx.navigation:navigation-common:2.8.5] /Users/john/.gradle/caches/8.13/transforms/0fa54c0b69d6fd5d4fc6394dd7090334/transformed/navigation-common-2.8.5/AndroidManifest.xml:17:1-22:12
@@ -95,8 +96,8 @@ ADDED from /Users/john/code/dcamp-android/app/src/main/AndroidManifest.xml:5:5-7
 	android:name
 		ADDED from /Users/john/code/dcamp-android/app/src/main/AndroidManifest.xml:5:22-76
 application
-ADDED from /Users/john/code/dcamp-android/app/src/main/AndroidManifest.xml:7:5-27:19
-INJECTED from /Users/john/code/dcamp-android/app/src/main/AndroidManifest.xml:7:5-27:19
+ADDED from /Users/john/code/dcamp-android/app/src/main/AndroidManifest.xml:7:5-35:19
+INJECTED from /Users/john/code/dcamp-android/app/src/main/AndroidManifest.xml:7:5-35:19
 MERGED from [androidx.compose.ui:ui-tooling-android:1.7.6] /Users/john/.gradle/caches/8.13/transforms/b8dfcd9980c992e20c65b323398629cf/transformed/ui-tooling-release/AndroidManifest.xml:22:5-26:19
 MERGED from [androidx.compose.ui:ui-tooling-android:1.7.6] /Users/john/.gradle/caches/8.13/transforms/b8dfcd9980c992e20c65b323398629cf/transformed/ui-tooling-release/AndroidManifest.xml:22:5-26:19
 MERGED from [androidx.lifecycle:lifecycle-process:2.8.7] /Users/john/.gradle/caches/8.13/transforms/f6b42ba05b9265fc744d2fd3c25794dd/transformed/lifecycle-process-2.8.7/AndroidManifest.xml:23:5-33:19
@@ -132,25 +133,47 @@ MERGED from [androidx.versionedparcelable:versionedparcelable:1.1.1] /Users/john
 	android:name
 		ADDED from /Users/john/code/dcamp-android/app/src/main/AndroidManifest.xml:8:9-41
 activity#com.decentespresso.dcamp.MainActivity
-ADDED from /Users/john/code/dcamp-android/app/src/main/AndroidManifest.xml:17:9-26:20
+ADDED from /Users/john/code/dcamp-android/app/src/main/AndroidManifest.xml:17:9-34:20
+	android:launchMode
+		ADDED from /Users/john/code/dcamp-android/app/src/main/AndroidManifest.xml:20:13-44
 	android:windowSoftInputMode
-		ADDED from /Users/john/code/dcamp-android/app/src/main/AndroidManifest.xml:20:13-55
+		ADDED from /Users/john/code/dcamp-android/app/src/main/AndroidManifest.xml:21:13-55
 	android:exported
 		ADDED from /Users/john/code/dcamp-android/app/src/main/AndroidManifest.xml:19:13-36
 	android:theme
-		ADDED from /Users/john/code/dcamp-android/app/src/main/AndroidManifest.xml:21:13-47
+		ADDED from /Users/john/code/dcamp-android/app/src/main/AndroidManifest.xml:22:13-47
 	android:name
 		ADDED from /Users/john/code/dcamp-android/app/src/main/AndroidManifest.xml:18:13-41
 intent-filter#action:name:android.intent.action.MAIN+category:name:android.intent.category.LAUNCHER
-ADDED from /Users/john/code/dcamp-android/app/src/main/AndroidManifest.xml:22:13-25:29
+ADDED from /Users/john/code/dcamp-android/app/src/main/AndroidManifest.xml:23:13-26:29
 action#android.intent.action.MAIN
-ADDED from /Users/john/code/dcamp-android/app/src/main/AndroidManifest.xml:23:17-69
+ADDED from /Users/john/code/dcamp-android/app/src/main/AndroidManifest.xml:24:17-69
 	android:name
-		ADDED from /Users/john/code/dcamp-android/app/src/main/AndroidManifest.xml:23:25-66
+		ADDED from /Users/john/code/dcamp-android/app/src/main/AndroidManifest.xml:24:25-66
 category#android.intent.category.LAUNCHER
-ADDED from /Users/john/code/dcamp-android/app/src/main/AndroidManifest.xml:24:17-77
+ADDED from /Users/john/code/dcamp-android/app/src/main/AndroidManifest.xml:25:17-77
 	android:name
-		ADDED from /Users/john/code/dcamp-android/app/src/main/AndroidManifest.xml:24:27-74
+		ADDED from /Users/john/code/dcamp-android/app/src/main/AndroidManifest.xml:25:27-74
+intent-filter#action:name:android.intent.action.VIEW+category:name:android.intent.category.BROWSABLE+category:name:android.intent.category.DEFAULT+data:host:auth+data:scheme:dcamp
+ADDED from /Users/john/code/dcamp-android/app/src/main/AndroidManifest.xml:28:13-33:29
+action#android.intent.action.VIEW
+ADDED from /Users/john/code/dcamp-android/app/src/main/AndroidManifest.xml:29:17-69
+	android:name
+		ADDED from /Users/john/code/dcamp-android/app/src/main/AndroidManifest.xml:29:25-66
+category#android.intent.category.DEFAULT
+ADDED from /Users/john/code/dcamp-android/app/src/main/AndroidManifest.xml:30:17-76
+	android:name
+		ADDED from /Users/john/code/dcamp-android/app/src/main/AndroidManifest.xml:30:27-73
+category#android.intent.category.BROWSABLE
+ADDED from /Users/john/code/dcamp-android/app/src/main/AndroidManifest.xml:31:17-78
+	android:name
+		ADDED from /Users/john/code/dcamp-android/app/src/main/AndroidManifest.xml:31:27-75
+data
+ADDED from /Users/john/code/dcamp-android/app/src/main/AndroidManifest.xml:32:17-68
+	android:host
+		ADDED from /Users/john/code/dcamp-android/app/src/main/AndroidManifest.xml:32:46-65
+	android:scheme
+		ADDED from /Users/john/code/dcamp-android/app/src/main/AndroidManifest.xml:32:23-45
 uses-sdk
 INJECTED from /Users/john/code/dcamp-android/app/src/main/AndroidManifest.xml reason: use-sdk injection requested
 INJECTED from /Users/john/code/dcamp-android/app/src/main/AndroidManifest.xml
@@ -167,6 +190,8 @@ MERGED from [androidx.appcompat:appcompat-resources:1.7.0] /Users/john/.gradle/c
 MERGED from [androidx.appcompat:appcompat-resources:1.7.0] /Users/john/.gradle/caches/8.13/transforms/d68a0a4c6d3cd2815d9d0b675c0bc4de/transformed/appcompat-resources-1.7.0/AndroidManifest.xml:5:5-44
 MERGED from [androidx.appcompat:appcompat:1.7.0] /Users/john/.gradle/caches/8.13/transforms/36f23e5dfc5c3eb209ddbbb11d48c623/transformed/appcompat-1.7.0/AndroidManifest.xml:5:5-44
 MERGED from [androidx.appcompat:appcompat:1.7.0] /Users/john/.gradle/caches/8.13/transforms/36f23e5dfc5c3eb209ddbbb11d48c623/transformed/appcompat-1.7.0/AndroidManifest.xml:5:5-44
+MERGED from [androidx.browser:browser:1.8.0] /Users/john/.gradle/caches/8.13/transforms/64cfea1cea5a33a2bc02a6bb68c37965/transformed/browser-1.8.0/AndroidManifest.xml:5:5-44
+MERGED from [androidx.browser:browser:1.8.0] /Users/john/.gradle/caches/8.13/transforms/64cfea1cea5a33a2bc02a6bb68c37965/transformed/browser-1.8.0/AndroidManifest.xml:5:5-44
 MERGED from [androidx.webkit:webkit:1.12.1] /Users/john/.gradle/caches/8.13/transforms/6c717c71dda3b20088b7a56414160a89/transformed/webkit-1.12.1/AndroidManifest.xml:5:5-44
 MERGED from [androidx.webkit:webkit:1.12.1] /Users/john/.gradle/caches/8.13/transforms/6c717c71dda3b20088b7a56414160a89/transformed/webkit-1.12.1/AndroidManifest.xml:5:5-44
 MERGED from [androidx.drawerlayout:drawerlayout:1.0.0] /Users/john/.gradle/caches/8.13/transforms/e9c7ebe613adc4264ce6023982ee208b/transformed/drawerlayout-1.0.0/AndroidManifest.xml:20:5-44

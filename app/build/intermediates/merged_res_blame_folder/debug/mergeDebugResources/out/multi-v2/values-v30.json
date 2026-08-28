@@ -1,7 +1,7 @@
 {
     "logs": [
         {
-            "outputFile": "com.decentespresso.dcamp.app-mergeDebugResources-60:/values-v30/values-v30.xml",
+            "outputFile": "com.decentespresso.dcamp.app-mergeDebugResources-61:/values-v30/values-v30.xml",
             "map": [
                 {
                     "source": "/Users/john/.gradle/caches/8.13/transforms/736398f456c15d21738b5ab4b5f77975/transformed/material3-release/res/values-v30/values-v30.xml",

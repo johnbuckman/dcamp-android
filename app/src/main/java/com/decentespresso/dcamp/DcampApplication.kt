@@ -1,9 +1,11 @@
 package com.decentespresso.dcamp
 
 import android.app.Application
+import com.decentespresso.dcamp.api.Services
 
-/**
- * Process-wide singletons (API client, session store) will be attached here as the
- * app grows. Kept minimal for the scaffold.
- */
-class DcampApplication : Application()
+class DcampApplication : Application() {
+    override fun onCreate() {
+        super.onCreate()
+        Services.init(this)
+    }
+}
