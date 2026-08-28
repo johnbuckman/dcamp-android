@@ -40,11 +40,19 @@ class MainActivity : ComponentActivity() {
 
             LaunchedEffect(Unit) { session.start() }
 
+            // Load server-driven UI strings once we know the viewer's language.
+            LaunchedEffect(state.phase, state.lang) {
+                if (state.phase == SessionStore.Phase.LOGGED_IN) {
+                    com.decentespresso.dcamp.ui.UIStrings.lang = state.lang
+                    com.decentespresso.dcamp.ui.UIStrings.load(Services.api)
+                }
+            }
+
             DcampTheme(mode = ThemeMode.from(AppConfig.themeRaw)) {
                 when (state.phase) {
                     SessionStore.Phase.LAUNCHING -> LaunchScreen()
                     SessionStore.Phase.LOGGED_OUT -> LoginView(session, state)
-                    SessionStore.Phase.LOGGED_IN -> HomePlaceholder(state)
+                    SessionStore.Phase.LOGGED_IN -> com.decentespresso.dcamp.ui.views.MainView(session, state)
                 }
             }
         }

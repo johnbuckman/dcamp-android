@@ -481,6 +481,15 @@ data class CardMessage(
     val createdAt: Int? = null,
 )
 
+// MARK: - Saved forum filters (Country / involvement)
+
+@Serializable
+data class SavedFilter(
+    val id: Int = 0,
+    val name: String = "",
+    val spec: String = "",
+)
+
 // MARK: - Small raw wrappers for endpoints whose shape isn't a first-class model
 
 @Serializable
