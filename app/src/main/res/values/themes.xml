@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Base app theme. Compose provides the real UI theme (see ui/theme); this is the
+         window-level shell: no action bar, edge-to-edge friendly, light background. -->
+    <style name="Theme.Dcamp" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:windowBackground">@color/window_background</item>
+        <item name="android:statusBarColor">@color/window_background</item>
+        <item name="android:windowLightStatusBar">true</item>
+        <item name="android:navigationBarColor">@color/window_background</item>
+    </style>
+</resources>

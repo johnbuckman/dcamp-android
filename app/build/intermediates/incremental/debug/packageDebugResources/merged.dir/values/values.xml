@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="ic_launcher_background">#FF6F4E37</color>
+    <color name="window_background">#FFFBF7F2</color>
+    <string name="app_name">dcamp</string>
+    <style name="Theme.Dcamp" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:windowBackground">@color/window_background</item>
+        <item name="android:statusBarColor">@color/window_background</item>
+        <item name="android:windowLightStatusBar">true</item>
+        <item name="android:navigationBarColor">@color/window_background</item>
+    </style>
+</resources>
