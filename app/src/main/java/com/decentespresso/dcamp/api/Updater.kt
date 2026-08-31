@@ -84,6 +84,15 @@ object Updater {
             }
         }
 
+    /** Whether the OS will let us launch the installer without the "unknown sources" wall. */
+    fun canInstall(ctx: Context): Boolean = ctx.packageManager.canRequestPackageInstalls()
+
+    /** Deep-link to THIS app's "Allow from this source" toggle (the direct approval UI), rather
+     *  than the generic "not allowed — go to Settings" dialog the installer shows otherwise. */
+    fun unknownSourcesSettings(ctx: Context): Intent =
+        Intent(android.provider.Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES,
+            android.net.Uri.parse("package:${ctx.packageName}"))
+
     /** Launch the system package installer for a downloaded APK (needs REQUEST_INSTALL_PACKAGES). */
     fun install(ctx: Context, apk: File) {
         val uri = FileProvider.getUriForFile(ctx, "${ctx.packageName}.fileprovider", apk)

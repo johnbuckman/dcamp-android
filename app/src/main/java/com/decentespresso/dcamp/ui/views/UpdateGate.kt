@@ -1,5 +1,7 @@
 package com.decentespresso.dcamp.ui.views
 
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -44,6 +46,19 @@ fun UpdateGate() {
     var info by remember { mutableStateOf<UpdateInfo?>(null) }
     var phase by remember { mutableIntStateOf(IDLE) }
     var progress by remember { mutableFloatStateOf(0f) }
+    var pendingApk by remember { mutableStateOf<java.io.File?>(null) }
+
+    // Returns from the per-app "Allow from this source" screen; install if now permitted.
+    val permLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) {
+        val f = pendingApk
+        if (f != null && Updater.canInstall(ctx)) { Updater.install(ctx, f); pendingApk = null; phase = IDLE }
+        else phase = FAILED
+    }
+
+    fun installOrRequest(f: java.io.File) {
+        if (Updater.canInstall(ctx)) { Updater.install(ctx, f); phase = IDLE }
+        else { pendingApk = f; permLauncher.launch(Updater.unknownSourcesSettings(ctx)) }
+    }
 
     LaunchedEffect(Unit) {
         Updater.check()?.let { info = it; phase = PROMPT }
@@ -78,7 +93,7 @@ fun UpdateGate() {
                     phase = DOWNLOADING; progress = 0f
                     scope.launch {
                         val f = Updater.download(ctx, i) { progress = it }
-                        if (f != null) { Updater.install(ctx, f); phase = IDLE } else phase = FAILED
+                        if (f != null) installOrRequest(f) else phase = FAILED
                     }
                 }) { Text(if (phase == FAILED) T("Retry") else T("Update")) }
             }
