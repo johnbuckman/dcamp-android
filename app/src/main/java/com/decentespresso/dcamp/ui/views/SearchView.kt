@@ -79,6 +79,12 @@ fun SearchView() {
     var derekAnswer by remember { mutableStateOf<String?>(null) }
     var derekLoading by remember { mutableStateOf(false) }
 
+    var sortNewest by remember { mutableStateOf(false) }
+    var goodOnly by remember { mutableStateOf(false) }
+    var selectedForum by remember { mutableStateOf<Int?>(null) }
+    var expertsOnly by remember { mutableStateOf(true) }
+    var sortMenu by remember { mutableStateOf(false) }
+
     val terms = remember(query) { query.lowercase().split(" ").filter { it.length >= 2 } }
 
     // Debounced search on query/types change.
@@ -89,6 +95,7 @@ fun SearchView() {
         searching = true
         val t = if (types.isEmpty()) "messages,comments,chat,pings" else types.joinToString(",")
         response = runCatching { Services.api.search(query, t, 0) }.getOrDefault(SearchResponse())
+        selectedForum = null
         searching = false
     }
 
@@ -144,6 +151,30 @@ fun SearchView() {
             }
         }
 
+        // Sort / best-matches / experts-only controls
+        Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 6.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Box {
+                FilterPill(if (sortNewest) T("Newest") else T("Relevance"), active = false) { sortMenu = true }
+                androidx.compose.material3.DropdownMenu(expanded = sortMenu, onDismissRequest = { sortMenu = false }) {
+                    androidx.compose.material3.DropdownMenuItem(text = { Text(T("Relevance")) }, onClick = { sortNewest = false; sortMenu = false })
+                    androidx.compose.material3.DropdownMenuItem(text = { Text(T("Newest")) }, onClick = { sortNewest = true; sortMenu = false })
+                }
+            }
+            FilterPill(T("Best matches"), active = goodOnly) { goodOnly = !goodOnly }
+            if (response.people.isNotEmpty() && !response.experts.isNullOrEmpty()) {
+                FilterPill(T("Experts only"), active = expertsOnly) { expertsOnly = !expertsOnly }
+            }
+        }
+        // Forum facet
+        response.forums?.takeIf { it.size > 1 }?.let { forums ->
+            Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 2.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                FilterPill(T("All forums"), active = selectedForum == null) { selectedForum = null }
+                forums.forEach { f -> FilterPill(f.name, active = selectedForum == f.id) { selectedForum = if (selectedForum == f.id) null else f.id } }
+            }
+        }
+
         LazyColumn(Modifier.fillMaxSize(), contentPadding = androidx.compose.foundation.layout.PaddingValues(16.dp)) {
             if (query.length >= 2) {
                 item {
@@ -166,7 +197,13 @@ fun SearchView() {
                     }
                 }
             }
-            val people = response.people
+            val people = run {
+                val ex = response.experts
+                if (expertsOnly && !ex.isNullOrEmpty()) {
+                    val set = ex.toSet()
+                    response.people.filter { set.contains(it.id) }.ifEmpty { response.people }
+                } else response.people
+            }
             if (people.isNotEmpty()) {
                 item { SectionHeader("${T("People")} (${people.size})") }
                 items(people, key = { "p-${it.id}" }) { p ->
@@ -174,7 +211,12 @@ fun SearchView() {
                     Divider(color = c.line)
                 }
             }
-            val results = response.results.sortedByDescending { it.score ?: 0.0 }
+            val results = run {
+                var list = response.results
+                selectedForum?.let { f -> list = list.filter { it.forumId == f } }
+                if (goodOnly) { val top = list.mapNotNull { it.score }.maxOrNull() ?: 0.0; if (top > 0) list = list.filter { (it.score ?: 0.0) >= top * 0.5 } }
+                if (sortNewest) list.sortedByDescending { it.createdAt ?: 0 } else list.sortedByDescending { it.score ?: 0.0 }
+            }
             if (results.isNotEmpty()) {
                 item { SectionHeader("${T("Results")} (${results.size})") }
                 items(results, key = { it.uid }) { hit ->

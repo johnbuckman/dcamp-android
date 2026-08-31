@@ -106,7 +106,14 @@ fun ThreadDetailView(messageID: Int, session: SessionStore.State) {
     // Prev/next across the board's ordered thread list.
     val siblings = router.threadSiblings
     val sibIdx = siblings.indexOf(currentID).takeIf { it >= 0 }
-    val firstUnread = lastVisit?.takeIf { it > 0 }?.let { lv -> comments.firstOrNull { (it.createdAt ?: 0) > lv }?.id }
+    // Forum Country filter: when on with a country selection, hide comments whose author
+    // isn't in the chosen countries (blank/unknown counts as non-matching), like the web.
+    val forumFilter = com.decentespresso.dcamp.ui.LocalForumFilter.current
+    val visibleComments = if (forumFilter.active && forumFilter.countries.isNotEmpty()) {
+        val set = forumFilter.countries.map { it.uppercase() }.toSet()
+        comments.filter { set.contains((it.authorCountry ?: "").uppercase()) }
+    } else comments.toList()
+    val firstUnread = lastVisit?.takeIf { it > 0 }?.let { lv -> visibleComments.firstOrNull { (it.createdAt ?: 0) > lv }?.id }
 
     Box(Modifier.fillMaxSize().background(c.bg)) {
         LazyColumn(contentPadding = androidx.compose.foundation.layout.PaddingValues(18.dp),
@@ -129,14 +136,14 @@ fun ThreadDetailView(messageID: Int, session: SessionStore.State) {
                 item { MessageCard(m, session, onChange = { scope.launch { load() } }, onDeleted = { router.pop() },
                     onEdit = { editMode = ComposeMode.EditThread(m) },
                     onQuote = { composerModel.insertQuote(quoteHtml(m.html)) }) }
-                if (comments.isNotEmpty()) {
+                if (visibleComments.isNotEmpty()) {
                     item {
-                        Text(T(if (comments.size == 1) "{n} comment" else "{n} comments", "n" to "${comments.size}"),
+                        Text(T(if (visibleComments.size == 1) "{n} comment" else "{n} comments", "n" to "${visibleComments.size}"),
                             fontSize = 16.sp, fontWeight = FontWeight.Bold, color = c.ink)
                     }
                     item {
                         Column(Modifier.fillMaxWidth().dcCard().padding(4.dp)) {
-                            comments.forEach { cm ->
+                            visibleComments.forEach { cm ->
                                 if (cm.id == firstUnread) SinceLastVisitDivider()
                                 CommentRow(cm, session, onChange = { scope.launch { load() } },
                                     onEdit = { editMode = ComposeMode.EditComment(cm) },
@@ -150,7 +157,7 @@ fun ThreadDetailView(messageID: Int, session: SessionStore.State) {
                     if (session.canPost) {
                         Column(Modifier.fillMaxWidth().padding(top = 6.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                             Text(T("Add a comment"), fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = c.ink)
-                            InlineComposer(T("Write a comment… (rich text, @mention)"), composerModel) { html ->
+                            InlineComposer(T("Write a comment… (rich text, @mention)"), composerModel, draftKey = "comment:$currentID") { html ->
                                 val r = runCatching { Services.api.createComment(currentID, html) }.getOrNull()
                                 if (r?.id != null) {
                                     scope.launch { load() }

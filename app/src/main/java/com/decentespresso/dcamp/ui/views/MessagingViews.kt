@@ -1,6 +1,11 @@
 package com.decentespresso.dcamp.ui.views
 
 import androidx.compose.foundation.background
+import kotlinx.coroutines.launch
+import com.decentespresso.dcamp.api.dmRemove
+import com.decentespresso.dcamp.api.dmInvite
+import com.decentespresso.dcamp.api.dmArchive
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -124,7 +129,7 @@ fun ChatView(session: SessionStore.State) {
         }
         if (session.canPost) {
             val model = remember { ComposerModel() }
-            InlineComposer(T("Message the room… (rich text, @mention)"), model) { html ->
+            InlineComposer(T("Message the room… (rich text, @mention)"), model, draftKey = "chat:main") { html ->
                 runCatching { Services.api.chatPost(bodyHTML = html) }.isSuccess.also {
                     if (it) runCatching { Services.api.chatLines() }.getOrNull()?.let { r -> lines.clear(); lines.addAll(r.lines) }
                 }
@@ -147,6 +152,7 @@ fun DMListView(session: SessionStore.State) {
     var query by remember { mutableStateOf("") }
     var offset by remember { mutableStateOf(0) }
     var hasMore by remember { mutableStateOf(true) }
+    var composingNew by remember { mutableStateOf(false) }
 
     suspend fun reload() {
         loading = true
@@ -170,8 +176,10 @@ fun DMListView(session: SessionStore.State) {
 
     LazyColumn(Modifier.fillMaxSize().background(c.bg), contentPadding = androidx.compose.foundation.layout.PaddingValues(18.dp)) {
         item {
-            Text(T("Direct Messages"), fontSize = 22.sp, fontWeight = FontWeight.Black, color = c.ink,
-                modifier = Modifier.padding(bottom = 12.dp))
+            Row(Modifier.fillMaxWidth().padding(bottom = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+                Text(T("Direct Messages"), fontSize = 22.sp, fontWeight = FontWeight.Black, color = c.ink, modifier = Modifier.weight(1f))
+                Text("✎", color = c.accent, fontSize = 22.sp, modifier = Modifier.clickable { composingNew = true })
+            }
         }
         item {
             Row(Modifier.fillMaxWidth().background(c.panel, RoundedCornerShape(10.dp)).padding(horizontal = 12.dp, vertical = 9.dp),
@@ -195,6 +203,10 @@ fun DMListView(session: SessionStore.State) {
                 if (idx == convos.lastIndex && hasMore) LaunchedEffect(convos.size) { loadMore() }
             }
         }
+    }
+
+    if (composingNew) {
+        NewDMView(onCreated = { convoID -> composingNew = false; router.push(Dest.Dm(convoID)) }, onDismiss = { composingNew = false })
     }
 }
 
@@ -221,19 +233,37 @@ private fun DMConversationRow(convo: DMConversation, onClick: () -> Unit) {
 @Composable
 fun DMThreadView(convoID: Int, session: SessionStore.State) {
     val c = DcampTheme.colors
+    val router = LocalRouter.current
+    val scope = rememberCoroutineScope()
     var thread by remember(convoID) { mutableStateOf(DMThread()) }
     val listState = rememberLazyListState()
+    var partMenu by remember { mutableStateOf(false) }
+    var showInvite by remember { mutableStateOf(false) }
+
+    suspend fun reloadThread() { runCatching { Services.api.dmThread(convoID) }.getOrNull()?.let { thread = it } }
 
     LaunchedEffect(convoID) {
-        runCatching { Services.api.dmThread(convoID) }.getOrNull()?.let { thread = it }
+        reloadThread()
         if (thread.messages.isNotEmpty()) listState.scrollToItem(thread.messages.lastIndex)
-        while (isActive) {
-            delay(6000)
-            runCatching { Services.api.dmThread(convoID) }.getOrNull()?.let { thread = it }
-        }
+        while (isActive) { delay(6000); reloadThread() }
     }
 
     Column(Modifier.fillMaxSize().background(c.bg)) {
+        Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text(thread.members.joinToString(", ") { it.name }, color = c.inkSoft, fontSize = 13.sp, maxLines = 1, modifier = Modifier.weight(1f))
+            Box {
+                Text("⋯", color = c.inkSoft, fontSize = 22.sp, modifier = Modifier.clickable { partMenu = true }.padding(horizontal = 6.dp))
+                androidx.compose.material3.DropdownMenu(expanded = partMenu, onDismissRequest = { partMenu = false }) {
+                    androidx.compose.material3.DropdownMenuItem(text = { Text(T("Add people")) }, onClick = { partMenu = false; showInvite = true })
+                    thread.members.filter { it.id != session.me?.id }.forEach { p ->
+                        androidx.compose.material3.DropdownMenuItem(text = { Text("${T("Remove")} ${p.name}") },
+                            onClick = { partMenu = false; scope.launch { Services.api.dmRemove(convoID, p.id); reloadThread() } })
+                    }
+                    androidx.compose.material3.DropdownMenuItem(text = { Text(T("Archive")) },
+                        onClick = { partMenu = false; scope.launch { Services.api.dmArchive(convoID); router.pop() } })
+                }
+            }
+        }
         LazyColumn(state = listState, modifier = Modifier.weight(1f),
             contentPadding = androidx.compose.foundation.layout.PaddingValues(16.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -243,12 +273,16 @@ fun DMThreadView(convoID: Int, session: SessionStore.State) {
         }
         if (session.canPost) {
             val model = remember(convoID) { ComposerModel() }
-            InlineComposer(T("Write a direct message… (rich text, @mention)"), model) { html ->
+            InlineComposer(T("Write a direct message… (rich text, @mention)"), model, draftKey = "dm:$convoID") { html ->
                 runCatching { Services.api.dmSend(convoID, html) }.isSuccess.also {
                     if (it) runCatching { Services.api.dmThread(convoID) }.getOrNull()?.let { t -> thread = t }
                 }
             }
         }
+    }
+
+    if (showInvite) {
+        PeopleSearchSheet(T("Invite"), onPick = { r -> Services.api.dmInvite(convoID, listOf(r.id), 30); reloadThread() }, onDismiss = { showInvite = false })
     }
 }
 

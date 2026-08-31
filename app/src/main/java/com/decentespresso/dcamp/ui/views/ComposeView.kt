@@ -128,7 +128,12 @@ fun ComposeView(mode: ComposeMode, session: SessionStore.State, onPosted: (Int) 
 
     LaunchedEffect(model) {
         repeat(30) { if (model.ready) return@repeat; delay(120) }
-        editHtml?.let { model.loadHTML(it) }
+        model.draftKey = when (mode) {
+            is ComposeMode.NewThread -> "new:${mode.board.id}"
+            is ComposeMode.CommentOn -> "comment:${mode.messageID}"
+            else -> null
+        }
+        if (editHtml != null) model.loadHTML(editHtml) else model.loadDraft()
         model.focus()
     }
 
@@ -141,11 +146,11 @@ fun ComposeView(mode: ComposeMode, session: SessionStore.State, onPosted: (Int) 
                 when (mode) {
                     is ComposeMode.NewThread -> {
                         val r = Services.api.createMessage(mode.board.id, categoryID, subject.trim(), html)
-                        val id = r.id ?: throw Exception(r.error ?: "Failed"); onPosted(id); onDismiss()
+                        val id = r.id ?: throw Exception(r.error ?: "Failed"); model.clearDraft(); onPosted(id); onDismiss()
                     }
                     is ComposeMode.CommentOn -> {
                         val r = Services.api.createComment(mode.messageID, html)
-                        val id = r.id ?: throw Exception(r.error ?: "Failed"); onPosted(id); onDismiss()
+                        val id = r.id ?: throw Exception(r.error ?: "Failed"); model.clearDraft(); onPosted(id); onDismiss()
                     }
                     is ComposeMode.EditThread -> { Services.api.messageUpdate(mode.message.id, mode.message.categoryId ?: 0, subject.trim(), html); onPosted(mode.message.id); onDismiss() }
                     is ComposeMode.EditComment -> { Services.api.commentUpdate(mode.comment.id, html); onPosted(mode.comment.id); onDismiss() }

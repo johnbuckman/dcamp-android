@@ -61,7 +61,17 @@ class ComposerModel {
     var contentHeight by mutableStateOf(0)
     var mentionQuery by mutableStateOf<String?>(null)
     var submitRequested by mutableStateOf(0)
+    var draftKey: String? = null   // per-context draft persistence
     private var lastHtml = ""
+
+    /** Restore this context's saved draft into the editor (call once ready). */
+    fun loadDraft() {
+        val k = draftKey ?: return
+        val d = com.decentespresso.dcamp.api.AppConfig.getDraft(k)
+        if (d.isNotEmpty() && PlainText.strip(d).isNotEmpty()) loadHTML(d)
+    }
+    /** Drop the saved draft (call after a successful post/send). */
+    fun clearDraft() { draftKey?.let { com.decentespresso.dcamp.api.AppConfig.clearDraft(it) } }
 
     private fun eval(js: String) { webView?.post { webView?.evaluateJavascript(js, null) } }
     private fun jsStr(s: String) = "\"" + s.replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", "\\n") + "\""
@@ -99,6 +109,10 @@ class ComposerModel {
                 "change" -> {
                     lastHtml = obj["html"]?.jsonPrimitive?.contentOrNull ?: ""
                     obj["height"]?.jsonPrimitive?.intOrNull?.let { if (it > 0) contentHeight = it }
+                    draftKey?.let { k ->
+                        if (PlainText.strip(lastHtml).isEmpty()) com.decentespresso.dcamp.api.AppConfig.clearDraft(k)
+                        else com.decentespresso.dcamp.api.AppConfig.setDraft(k, lastHtml)
+                    }
                 }
                 "mention" -> mentionQuery = obj["q"]?.jsonPrimitive?.contentOrNull
                 "submit" -> submitRequested++
@@ -123,7 +137,7 @@ private class ComposerBridge(val model: ComposerModel) {
  * failure). Read-only sessions never see this (callers gate on canPost).
  */
 @Composable
-fun InlineComposer(placeholder: String, model: ComposerModel, onSend: suspend (String) -> Boolean) {
+fun InlineComposer(placeholder: String, model: ComposerModel, draftKey: String? = null, onSend: suspend (String) -> Boolean) {
     val c = DcampTheme.colors
     val scope = rememberCoroutineScope()
     var sending by remember { mutableStateOf(false) }
@@ -135,15 +149,18 @@ fun InlineComposer(placeholder: String, model: ComposerModel, onSend: suspend (S
         scope.launch {
             val html = model.currentHTML()
             if (PlainText.strip(html).isNotEmpty()) {
-                if (onSend(html)) model.clear()
+                if (onSend(html)) { model.clear(); model.clearDraft() }
             }
             sending = false
         }
     }
 
-    // Apply placeholder once the editor is ready; observe ⌘↵ submit.
+    // Apply placeholder once the editor is ready; restore any draft; observe ⌘↵ submit.
     LaunchedEffect(model) {
-        repeat(40) { if (model.ready) { model.setPlaceholder(placeholder); return@LaunchedEffect }; delay(150) }
+        repeat(40) {
+            if (model.ready) { model.setPlaceholder(placeholder); model.draftKey = draftKey; model.loadDraft(); return@LaunchedEffect }
+            delay(150)
+        }
     }
     LaunchedEffect(model) { snapshotFlow { model.submitRequested }.collect { if (it > 0) send() } }
 

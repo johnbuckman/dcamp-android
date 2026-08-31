@@ -68,11 +68,13 @@ import com.decentespresso.dcamp.ui.theme.hexColor
 fun MainView(session: SessionStore, state: SessionStore.State) {
     val c = DcampTheme.colors
     val router = remember { Router() }
+    val forumFilter = remember { com.decentespresso.dcamp.ui.ForumFilterStore() }
     val top = router.backStack.lastOrNull()
 
     BackHandler(enabled = router.backStack.isNotEmpty()) { router.pop() }
 
-    androidx.compose.runtime.CompositionLocalProvider(LocalRouter provides router) {
+    androidx.compose.runtime.CompositionLocalProvider(LocalRouter provides router,
+        com.decentespresso.dcamp.ui.LocalForumFilter provides forumFilter) {
         Column(Modifier.fillMaxSize().background(c.bg)) {
             TopBar(session, state, showBack = router.backStack.isNotEmpty(), onBack = { router.pop() })
             Box(Modifier.fillMaxSize()) {

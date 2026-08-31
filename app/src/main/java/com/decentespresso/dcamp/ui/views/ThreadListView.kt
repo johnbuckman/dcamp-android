@@ -67,6 +67,8 @@ fun ThreadListView(board: Board, session: SessionStore.State) {
     var loading by remember { mutableStateOf(false) }
     var statusFilter by remember { mutableStateOf("unsolved") }
     var composing by remember { mutableStateOf(false) }
+    var showFilter by remember { mutableStateOf(false) }
+    val forumFilter = com.decentespresso.dcamp.ui.LocalForumFilter.current
     val isProblems = board.name == "Problems"
 
     suspend fun load(reset: Boolean) {
@@ -77,6 +79,7 @@ fun ThreadListView(board: Board, session: SessionStore.State) {
             val params = buildMap {
                 put("project_id", board.id.toString()); put("offset", offset.toString()); put("limit", "30")
                 if (isProblems && statusFilter != "all") put("status", statusFilter)
+                putAll(forumFilter.messageParams)
             }
             val page = runCatching { Services.api.messagesPage(params) }.getOrNull() ?: return
             if (reset) { rows.clear(); rows.addAll(page.messages) } else rows.addAll(page.messages)
@@ -104,6 +107,17 @@ fun ThreadListView(board: Board, session: SessionStore.State) {
             }
         }
         item { SummarizeBar(SummaryKind.Forum(board.id, board.name)); Spacer(Modifier.size(12.dp)) }
+        item {
+            Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(bottom = 10.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                StatusPill("≡ ${if (forumFilter.selected) forumFilter.label else T("Filter")}", active = forumFilter.on) { showFilter = true }
+                if (forumFilter.selected) {
+                    StatusPill(if (forumFilter.on) T("Filter on") else T("Filter off"), active = forumFilter.on) {
+                        forumFilter.toggleOn(); scope.launch { load(reset = true) }
+                    }
+                }
+            }
+        }
         if (isProblems) {
             item {
                 Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(bottom = 10.dp),
@@ -139,6 +153,9 @@ fun ThreadListView(board: Board, session: SessionStore.State) {
         ComposeView(ComposeMode.NewThread(board), session,
             onPosted = { newID -> composing = false; router.threadSiblings = rows.map { it.id }; router.push(Dest.Thread(newID)) },
             onDismiss = { composing = false })
+    }
+    if (showFilter) {
+        FilterSheet(forumFilter, onApply = { scope.launch { load(reset = true) } }, onDismiss = { showFilter = false })
     }
 }
 

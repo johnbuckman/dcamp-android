@@ -60,6 +60,16 @@ object AppConfig {
         get() = if (::prefs.isInitialized) prefs.getString(KEY_THEME, "") ?: "" else ""
         set(v) { if (::prefs.isInitialized) prefs.edit().putString(KEY_THEME, v).apply() }
 
+    /** Persisted forum-filter spec (JSON), mirroring the web's dcamp_forum_filter. */
+    var forumFilter: String
+        get() = if (::prefs.isInitialized) prefs.getString("dcamp_forum_filter", "") ?: "" else ""
+        set(v) { if (::prefs.isInitialized) prefs.edit().putString("dcamp_forum_filter", v).apply() }
+
+    /** Per-context composer draft (keyed). */
+    fun getDraft(key: String): String = if (::prefs.isInitialized) prefs.getString("draft_$key", "") ?: "" else ""
+    fun setDraft(key: String, html: String) { if (::prefs.isInitialized) prefs.edit().putString("draft_$key", html).apply() }
+    fun clearDraft(key: String) { if (::prefs.isInitialized) prefs.edit().remove("draft_$key").apply() }
+
     /** Absolute URL from a possibly-relative server path (avatars, attachments). */
     fun absUrl(path: String?): String? {
         if (path.isNullOrEmpty()) return null
