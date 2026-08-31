@@ -16,6 +16,8 @@ sealed class Dest {
     data class Dm(val id: Int) : Dest()
     data object Search : Dest()
     data object Find : Dest()
+    data object Notifications : Dest()
+    data object Settings : Dest()
 }
 
 /**

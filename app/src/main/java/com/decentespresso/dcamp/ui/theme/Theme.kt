@@ -38,6 +38,14 @@ object DcampTheme {
         @Composable @ReadOnlyComposable get() = LocalDcampColors.current
 }
 
+/** Reactive app-wide theme selection so a change in Settings applies immediately. */
+object ThemeState {
+    private val _mode = androidx.compose.runtime.mutableStateOf(ThemeMode.SYSTEM)
+    var mode: ThemeMode
+        get() = _mode.value
+        set(v) { _mode.value = v }
+}
+
 private val DcampTypography = Typography(
     // Body defaults tuned to match the iOS 14–15pt content sizing.
     bodyLarge = Typography().bodyLarge.copy(fontSize = 15.sp, lineHeight = 22.sp),

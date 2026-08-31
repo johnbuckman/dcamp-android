@@ -38,7 +38,10 @@ class MainActivity : ComponentActivity() {
             val session = Services.session
             val state by session.state.collectAsState()
 
-            LaunchedEffect(Unit) { session.start() }
+            LaunchedEffect(Unit) {
+                com.decentespresso.dcamp.ui.theme.ThemeState.mode = ThemeMode.from(AppConfig.themeRaw)
+                session.start()
+            }
 
             // Load server-driven UI strings once we know the viewer's language.
             LaunchedEffect(state.phase, state.lang) {
@@ -48,7 +51,7 @@ class MainActivity : ComponentActivity() {
                 }
             }
 
-            DcampTheme(mode = ThemeMode.from(AppConfig.themeRaw)) {
+            DcampTheme(mode = com.decentespresso.dcamp.ui.theme.ThemeState.mode) {
                 when (state.phase) {
                     SessionStore.Phase.LAUNCHING -> LaunchScreen()
                     SessionStore.Phase.LOGGED_OUT -> LoginView(session, state)

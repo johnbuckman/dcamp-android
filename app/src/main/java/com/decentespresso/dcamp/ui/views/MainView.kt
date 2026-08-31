@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
@@ -36,6 +37,7 @@ import androidx.compose.material.icons.filled.LocalFireDepartment
 import androidx.compose.material.icons.filled.Map
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.QuestionAnswer
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -84,8 +86,10 @@ fun MainView(session: SessionStore, state: SessionStore.State) {
                     Dest.Chat -> ChatView(state)
                     Dest.Dms -> DMListView(state)
                     is Dest.Dm -> DMThreadView(d.id, state)
-                    Dest.Search -> PlaceholderScreen("Search")
+                    Dest.Search -> SearchView()
                     Dest.Find -> PlaceholderScreen("Find forums")
+                    Dest.Notifications -> NotificationsView(state)
+                    Dest.Settings -> SettingsView(session, state)
                 }
             }
         }
@@ -93,8 +97,9 @@ fun MainView(session: SessionStore, state: SessionStore.State) {
 
     // Person card sheet
     router.personID?.let { pid ->
-        // PersonCardView built in Phase 7; placeholder dismiss for now.
-        PersonCardSheetPlaceholder(pid) { router.personID = null }
+        androidx.compose.runtime.CompositionLocalProvider(LocalRouter provides router) {
+            PersonCardView(pid) { router.personID = null }
+        }
     }
 }
 
@@ -112,10 +117,22 @@ private fun TopBar(session: SessionStore, state: SessionStore.State, showBack: B
         }
         Text("dcamp", fontSize = 18.sp, fontWeight = FontWeight.Black, color = c.ink)
         Spacer(Modifier.weight(1f))
-        Icon(Icons.Filled.Notifications, contentDescription = "Notifications", tint = c.inkSoft,
-            modifier = Modifier.size(24.dp))
-        Spacer(Modifier.width(6.dp))
-        Avatar(person = state.me, size = 28.dp)
+        val router = LocalRouter.current
+        Icon(Icons.Filled.Search, contentDescription = "Search", tint = c.inkSoft,
+            modifier = Modifier.size(24.dp).clickable { router.push(Dest.Search) })
+        Spacer(Modifier.width(14.dp))
+        Box {
+            Icon(Icons.Filled.Notifications, contentDescription = "Notifications", tint = c.inkSoft,
+                modifier = Modifier.size(24.dp).clickable { router.push(Dest.Notifications) })
+            if (state.pingUnread > 0) {
+                Text(if (state.pingUnread > 99) "99+" else "${state.pingUnread}", fontSize = 9.sp,
+                    fontWeight = FontWeight.Bold, color = Color.White,
+                    modifier = Modifier.align(Alignment.TopEnd).offset(x = 6.dp, y = (-4).dp)
+                        .background(Color(0xFFDC2626), CircleShape).padding(horizontal = 4.dp, vertical = 1.dp))
+            }
+        }
+        Spacer(Modifier.width(14.dp))
+        Avatar(person = state.me, size = 28.dp, onClick = { router.push(Dest.Settings) })
     }
 }
 
