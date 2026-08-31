@@ -90,6 +90,8 @@ fun MainView(session: SessionStore, state: SessionStore.State) {
                     Dest.Find -> PlaceholderScreen("Find forums")
                     Dest.Notifications -> NotificationsView(state)
                     Dest.Settings -> SettingsView(session, state)
+                    Dest.EmailSummaries -> EmailSummariesView(state)
+                    Dest.Help -> HelpView()
                 }
             }
         }
@@ -152,6 +154,7 @@ private fun ForumsHomeView(session: SessionStore, state: SessionStore.State) {
                 Text("${T("Forums")}: ${state.boards.size}", fontSize = 15.sp, color = c.muted)
             }
         }
+        item(span = { GridItemSpan(maxLineSpan) }) { SummarizeBar(SummaryKind.Home) }
         items(state.boards, key = { it.id }) { board ->
             ForumCard(board)
         }

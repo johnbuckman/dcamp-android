@@ -37,6 +37,8 @@ import com.decentespresso.dcamp.api.AppConfig
 import com.decentespresso.dcamp.api.Person
 import com.decentespresso.dcamp.api.Services
 import com.decentespresso.dcamp.api.SessionStore
+import com.decentespresso.dcamp.api.locationGet
+import com.decentespresso.dcamp.api.locationSave
 import com.decentespresso.dcamp.api.personMutes
 import com.decentespresso.dcamp.api.personUnmute
 import com.decentespresso.dcamp.api.settingsSave
@@ -71,10 +73,36 @@ fun SettingsView(session: SessionStore, state: SessionStore.State) {
     val email = remember { mutableStateListOf<String>() }
     val muted = remember { mutableStateListOf<Person>() }
     var lang by remember { mutableStateOf(AppConfig.lang) }
+    var city by remember { mutableStateOf("") }
+    var country by remember { mutableStateOf("") }
+    var showLocation by remember { mutableStateOf(true) }
+    var avatarImg by remember { mutableStateOf(state.me?.avatarImg ?: "") }
+    var uploadingAvatar by remember { mutableStateOf(false) }
+    val context = androidx.compose.ui.platform.LocalContext.current
+
+    val photoPicker = androidx.activity.compose.rememberLauncherForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.GetContent()
+    ) { uri ->
+        if (uri != null) {
+            uploadingAvatar = true
+            scope.launch {
+                val bytes = runCatching { context.contentResolver.openInputStream(uri)?.use { it.readBytes() } }.getOrNull()
+                if (bytes != null) {
+                    val mime = context.contentResolver.getType(uri) ?: "image/jpeg"
+                    val url = runCatching { Services.api.uploadImage(bytes, "avatar.jpg", mime) }.getOrNull()
+                    if (url != null) { avatarImg = url; Services.api.settingsSave(name, about, url, showLocation); session.refresh() }
+                }
+                uploadingAvatar = false
+            }
+        }
+    }
 
     LaunchedEffect(Unit) {
         runCatching { Services.api.notifPrefsGet() }.getOrNull()?.let {
             popup.clear(); popup.addAll(it.popup); email.clear(); email.addAll(it.email)
+        }
+        runCatching { Services.api.locationGet() }.getOrNull()?.let {
+            city = it.city ?: ""; country = it.countryCode ?: ""; showLocation = (it.showLocation ?: 1) != 0
         }
         muted.clear(); muted.addAll(Services.api.personMutes())
     }
@@ -96,13 +124,14 @@ fun SettingsView(session: SessionStore, state: SessionStore.State) {
 
         SettingsSection(T("Profile")) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
-                Avatar(person = state.me, size = 56.dp)
-                Text(T("Change photo"), color = c.link, fontSize = 14.sp)
+                Avatar(person = state.me?.copy(avatarImg = avatarImg.ifEmpty { state.me?.avatarImg }), size = 56.dp)
+                Text(if (uploadingAvatar) T("Uploading…") else T("Change photo"), color = c.link, fontSize = 14.sp,
+                    modifier = Modifier.clickable(enabled = !uploadingAvatar) { photoPicker.launch("image/*") })
             }
             LabeledField(T("Display name"), name) { name = it }
             LabeledField(T("About you"), about) { about = it }
             PrimaryTextButton(T("Save profile")) {
-                scope.launch { Services.api.settingsSave(name, about, state.me?.avatarImg ?: "", true); session.refresh() }
+                scope.launch { Services.api.settingsSave(name, about, avatarImg.ifEmpty { state.me?.avatarImg ?: "" }, showLocation); session.refresh() }
             }
         }
 
@@ -123,6 +152,22 @@ fun SettingsView(session: SessionStore, state: SessionStore.State) {
                         Text(label, color = c.ink, fontSize = 15.sp, modifier = Modifier.weight(1f))
                         if (lang == code) Text("✓", color = c.accent, fontSize = 16.sp)
                     }
+                }
+            }
+        }
+
+        SettingsSection(T("Location")) {
+            LabeledField(T("City"), city) { city = it }
+            LabeledField(T("Country"), country) { country = it }
+            Row(Modifier.fillMaxWidth().clickable { showLocation = !showLocation }, verticalAlignment = Alignment.CenterVertically) {
+                Text(T("Show my city & country on my profile"), color = c.ink, fontSize = 15.sp, modifier = Modifier.weight(1f))
+                androidx.compose.material3.Switch(checked = showLocation, onCheckedChange = { showLocation = it },
+                    colors = androidx.compose.material3.SwitchDefaults.colors(checkedTrackColor = c.accent))
+            }
+            PrimaryTextButton(T("Save location")) {
+                scope.launch {
+                    Services.api.locationSave(country, city)
+                    Services.api.settingsSave(name, about, avatarImg.ifEmpty { state.me?.avatarImg ?: "" }, showLocation)
                 }
             }
         }
@@ -165,6 +210,13 @@ fun SettingsView(session: SessionStore, state: SessionStore.State) {
                 Text(if (state.bcLinked) T("Linked") else T("Not linked"),
                     color = if (state.bcLinked) c.accentInk else c.muted, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
             }
+        }
+
+        SettingsSection(T("More")) {
+            Text(T("Summaries by email"), color = c.link, fontSize = 15.sp, fontWeight = FontWeight.SemiBold,
+                modifier = Modifier.fillMaxWidth().clickable { router.push(com.decentespresso.dcamp.ui.Dest.EmailSummaries) })
+            Text(T("Help"), color = c.link, fontSize = 15.sp, fontWeight = FontWeight.SemiBold,
+                modifier = Modifier.fillMaxWidth().clickable { router.push(com.decentespresso.dcamp.ui.Dest.Help) })
         }
 
         SettingsSection(T("Account")) {

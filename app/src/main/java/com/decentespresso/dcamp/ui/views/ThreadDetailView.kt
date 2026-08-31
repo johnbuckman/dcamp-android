@@ -105,6 +105,7 @@ fun ThreadDetailView(messageID: Int, session: SessionStore.State) {
     Box(Modifier.fillMaxSize().background(c.bg)) {
         LazyColumn(contentPadding = androidx.compose.foundation.layout.PaddingValues(18.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp)) {
+            item { SummarizeBar(SummaryKind.Thread(currentID)) }
             message?.let { m ->
                 item {
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -160,9 +161,10 @@ fun ThreadDetailView(messageID: Int, session: SessionStore.State) {
 @Composable
 private fun MessageCard(m: MessageDetail, session: SessionStore.State, onChange: () -> Unit, onDeleted: () -> Unit) {
     val c = DcampTheme.colors
+    val router = LocalRouter.current
     Column(Modifier.fillMaxWidth().dcCard().padding(18.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            Avatar(person = m.author, size = 46.dp, onClick = null)
+            Avatar(person = m.author, size = 46.dp, onClick = { m.author?.id?.let { router.personID = it } })
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     if (m.pinned == 1) Icon(Icons.Filled.PushPin, contentDescription = null, tint = Color(0xFFFF9800), modifier = Modifier.size(16.dp))
@@ -180,8 +182,9 @@ private fun MessageCard(m: MessageDetail, session: SessionStore.State, onChange:
 @Composable
 private fun CommentRow(cm: Comment, session: SessionStore.State, onChange: () -> Unit) {
     val c = DcampTheme.colors
+    val router = LocalRouter.current
     Row(Modifier.fillMaxWidth().padding(14.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-        Avatar(person = cm.author, size = 34.dp, onClick = null)
+        Avatar(person = cm.author, size = 34.dp, onClick = { cm.author?.id?.let { router.personID = it } })
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Box(Modifier.weight(1f)) { AuthorLine(person = cm.author, date = cm.createdAt) }

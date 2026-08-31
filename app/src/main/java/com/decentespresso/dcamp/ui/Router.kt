@@ -18,6 +18,8 @@ sealed class Dest {
     data object Find : Dest()
     data object Notifications : Dest()
     data object Settings : Dest()
+    data object EmailSummaries : Dest()
+    data object Help : Dest()
 }
 
 /**

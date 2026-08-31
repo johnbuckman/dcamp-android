@@ -44,6 +44,7 @@ import com.decentespresso.dcamp.api.Services
 import com.decentespresso.dcamp.api.dmDirect
 import com.decentespresso.dcamp.api.personMute
 import com.decentespresso.dcamp.api.personUnmute
+import com.decentespresso.dcamp.api.reportPerson
 import kotlinx.coroutines.launch
 import com.decentespresso.dcamp.ui.Dest
 import com.decentespresso.dcamp.ui.LocalRouter
@@ -59,6 +60,8 @@ fun PersonCardView(personID: Int, onDismiss: () -> Unit) {
     var card by remember(personID) { mutableStateOf<PersonCard?>(null) }
     var loading by remember(personID) { mutableStateOf(true) }
     var muted by remember(personID) { mutableStateOf(false) }
+    var reporting by remember(personID) { mutableStateOf(false) }
+    var reportReason by remember(personID) { mutableStateOf("") }
     val scope = rememberCoroutineScope()
 
     LaunchedEffect(personID) {
@@ -99,7 +102,7 @@ fun PersonCardView(personID: Int, onDismiss: () -> Unit) {
                                 muted = !muted
                             }
                         }
-                        ActionButton(Icons.Filled.Flag, T("Report")) { }
+                        ActionButton(Icons.Filled.Flag, T("Report")) { reporting = true }
                     }
                     if (cc.messages.isNotEmpty()) {
                         Divider(color = c.line)
@@ -122,6 +125,30 @@ fun PersonCardView(personID: Int, onDismiss: () -> Unit) {
                 else -> Text(T("Couldn’t load profile"), color = c.muted)
             }
         }
+    }
+
+    if (reporting) {
+        val cc = card
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { reporting = false },
+            title = { Text(T("Report {name}?", "name" to (cc?.person?.name ?: ""))) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(T("This alerts the moderators."), fontSize = 13.sp, color = c.muted)
+                    androidx.compose.material3.OutlinedTextField(value = reportReason, onValueChange = { reportReason = it },
+                        label = { Text(T("Reason")) }, singleLine = false)
+                }
+            },
+            confirmButton = {
+                androidx.compose.material3.TextButton(onClick = {
+                    val id = cc?.person?.id; reporting = false
+                    scope.launch { if (id != null) Services.api.reportPerson(id, reportReason, "app://person/$id"); reportReason = "" }
+                }) { Text(T("Report")) }
+            },
+            dismissButton = {
+                androidx.compose.material3.TextButton(onClick = { reporting = false; reportReason = "" }) { Text(T("Cancel")) }
+            },
+        )
     }
 }
 

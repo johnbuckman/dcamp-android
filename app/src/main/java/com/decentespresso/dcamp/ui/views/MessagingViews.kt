@@ -60,8 +60,9 @@ import kotlinx.coroutines.isActive
 /** Flat author-headed message row (chat), matching the web: avatar + name/badges + body. */
 @Composable
 private fun LineRow(author: Person?, html: String, createdAt: Int?, translated: String?) {
+    val router = LocalRouter.current
     Row(Modifier.fillMaxWidth().padding(vertical = 10.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-        Avatar(person = author, size = 36.dp, onClick = null)
+        Avatar(person = author, size = 36.dp, onClick = { author?.id?.let { router.personID = it } })
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(5.dp)) {
             AuthorLine(person = author, date = createdAt)
             TranslatableText(original = html, translated = translated)
@@ -115,7 +116,7 @@ fun ChatView(session: SessionStore.State) {
 
     Column(Modifier.fillMaxSize().background(c.bg)) {
         LazyColumn(state = listState, modifier = Modifier.weight(1f), contentPadding = androidx.compose.foundation.layout.PaddingValues(18.dp)) {
-            item { Column(Modifier.fillMaxWidth().dcCard().padding(8.dp)) { } }
+            item { Box(Modifier.padding(bottom = 8.dp)) { SummarizeBar(SummaryKind.Chat) } }
             items(lines, key = { it.id }) { line ->
                 LineRow(line.author, line.html, line.createdAt, line.bodyTr)
                 Divider(color = c.line)
@@ -255,13 +256,15 @@ fun DMThreadView(convoID: Int, session: SessionStore.State) {
 @Composable
 private fun DMBubble(message: DMMessage, showSender: Boolean) {
     val c = DcampTheme.colors
+    val router = LocalRouter.current
     val mine = message.isMine
     val senderTint = hexColor(message.sender?.avatarColor) ?: c.accent
+    val openSender: () -> Unit = { message.sender?.id?.let { router.personID = it } }
 
     Row(Modifier.fillMaxWidth(), horizontalArrangement = if (mine) Arrangement.End else Arrangement.Start,
         verticalAlignment = Alignment.Bottom) {
         if (mine) Spacer(Modifier.widthIn(min = 44.dp))
-        else { Avatar(person = message.sender, size = 28.dp); Spacer(Modifier.size(8.dp)) }
+        else { Avatar(person = message.sender, size = 28.dp, onClick = openSender); Spacer(Modifier.size(8.dp)) }
 
         Column(
             Modifier.widthIn(max = 280.dp)
@@ -282,7 +285,7 @@ private fun DMBubble(message: DMMessage, showSender: Boolean) {
                 fontSize = 11.sp, color = if (mine) Color.White.copy(alpha = 0.75f) else c.muted)
         }
 
-        if (mine) { Spacer(Modifier.size(8.dp)); Avatar(person = message.sender, size = 28.dp) }
+        if (mine) { Spacer(Modifier.size(8.dp)); Avatar(person = message.sender, size = 28.dp, onClick = openSender) }
         else Spacer(Modifier.widthIn(min = 44.dp))
     }
 }

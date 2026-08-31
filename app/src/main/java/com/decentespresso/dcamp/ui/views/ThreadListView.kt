@@ -96,6 +96,7 @@ fun ThreadListView(board: Board, session: SessionStore.State) {
                 Text(T(board.name), fontSize = 26.sp, fontWeight = FontWeight.Black, color = c.ink)
             }
         }
+        item { SummarizeBar(SummaryKind.Forum(board.id, board.name)); Spacer(Modifier.size(12.dp)) }
         if (isProblems) {
             item {
                 Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(bottom = 10.dp),
