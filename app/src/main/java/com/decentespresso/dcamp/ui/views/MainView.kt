@@ -2,6 +2,7 @@ package com.decentespresso.dcamp.ui.views
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
+import kotlinx.coroutines.launch
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -25,6 +26,7 @@ import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -43,6 +45,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -52,6 +55,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.decentespresso.dcamp.api.Board
+import com.decentespresso.dcamp.api.Services
 import com.decentespresso.dcamp.api.SessionStore
 import com.decentespresso.dcamp.ui.Dest
 import com.decentespresso.dcamp.ui.LocalRouter
@@ -73,10 +77,35 @@ fun MainView(session: SessionStore, state: SessionStore.State) {
 
     BackHandler(enabled = router.backStack.isNotEmpty()) { router.pop() }
 
+    // Foreground notification toast: poll for new notifications and surface the newest.
+    var toast by remember { androidx.compose.runtime.mutableStateOf<com.decentespresso.dcamp.api.Notif?>(null) }
+    var lastNotifMax by remember { androidx.compose.runtime.mutableIntStateOf(-1) }
+    androidx.compose.runtime.LaunchedEffect(Unit) {
+        while (true) {
+            val items = runCatching { Services.api.notifPoll() }.getOrDefault(emptyList())
+            val newest = items.maxByOrNull { it.id }
+            if (newest != null && lastNotifMax >= 0 && newest.id > lastNotifMax) {
+                toast = newest
+                val id = newest.id
+                launch { kotlinx.coroutines.delay(4000); if (toast?.id == id) toast = null }
+            }
+            if (newest != null) lastNotifMax = maxOf(lastNotifMax, newest.id)
+            else if (lastNotifMax < 0) lastNotifMax = 0
+            kotlinx.coroutines.delay(30000)
+        }
+    }
+
     androidx.compose.runtime.CompositionLocalProvider(LocalRouter provides router,
         com.decentespresso.dcamp.ui.LocalForumFilter provides forumFilter) {
         Column(Modifier.fillMaxSize().background(c.bg)) {
             TopBar(session, state, showBack = router.backStack.isNotEmpty(), onBack = { router.pop() })
+            toast?.let { n ->
+                NotifToast(n) {
+                    toast = null
+                    com.decentespresso.dcamp.api.DcampRoute.messageID(n.route)?.let { router.push(Dest.Thread(it)) }
+                        ?: com.decentespresso.dcamp.api.DcampRoute.dmID(n.route)?.let { router.push(Dest.Dm(it)) }
+                }
+            }
             Box(Modifier.fillMaxSize()) {
                 when (val d = top) {
                     null -> ForumsHomeView(session, state)
@@ -143,6 +172,7 @@ private fun TopBar(session: SessionStore, state: SessionStore.State, showBack: B
 @Composable
 private fun ForumsHomeView(session: SessionStore, state: SessionStore.State) {
     val c = DcampTheme.colors
+    DcampPull(onRefresh = { session.refresh() }) {
     LazyVerticalGrid(
         columns = GridCells.Adaptive(minSize = 240.dp),
         contentPadding = PaddingValues(18.dp),
@@ -176,6 +206,7 @@ private fun ForumsHomeView(session: SessionStore, state: SessionStore.State) {
                     T("Discover regional & roaster forums."))
             }
         }
+    }
     }
 }
 
@@ -259,4 +290,23 @@ private fun PlaceholderScreen(title: String) {
 @Composable
 private fun PersonCardSheetPlaceholder(personID: Int, onDismiss: () -> Unit) {
     // Real PersonCardView arrives in Phase 7.
+}
+
+/** Foreground toast card for a newly-arrived notification (tap to open). */
+@Composable
+private fun NotifToast(notif: com.decentespresso.dcamp.api.Notif, onTap: () -> Unit) {
+    val c = DcampTheme.colors
+    Row(
+        Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp)
+            .background(c.panel, RoundedCornerShape(12.dp))
+            .border(1.dp, c.line, RoundedCornerShape(12.dp)).clickable { onTap() }.padding(12.dp),
+        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        Avatar(person = notif.actor, size = 32.dp)
+        Column(Modifier.weight(1f)) {
+            Text(notif.actor?.name ?: "dcamp", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = c.ink, maxLines = 1)
+            Text(notif.kindLabel, fontSize = 13.sp, color = c.inkSoft, maxLines = 1)
+        }
+        Text("›", color = c.muted, fontSize = 18.sp)
+    }
 }
