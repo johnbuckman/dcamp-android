@@ -72,7 +72,8 @@ fun UpdateGate() {
         title = { Text(T("Update available")) },
         text = {
             Column {
-                Text(T("Version {v} is available.", "v" to i.version))
+                Text(T("You have version {cur}, version {new} is available.",
+                    "cur" to com.decentespresso.dcamp.BuildConfig.VERSION_NAME, "new" to i.version))
                 if (i.notes.isNotEmpty()) {
                     Spacer(Modifier.height(8.dp))
                     Text(i.notes, fontSize = 13.sp, maxLines = 6)
