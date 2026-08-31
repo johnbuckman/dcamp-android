@@ -70,6 +70,11 @@ object AppConfig {
         get() = if (::prefs.isInitialized) prefs.getString("dcamp_dismissed_update", "") ?: "" else ""
         set(v) { if (::prefs.isInitialized) prefs.edit().putString("dcamp_dismissed_update", v).apply() }
 
+    /** Epoch millis of the last successful update check — throttles the on-foreground check. */
+    var lastUpdateCheck: Long
+        get() = if (::prefs.isInitialized) prefs.getLong("dcamp_last_update_check", 0L) else 0L
+        set(v) { if (::prefs.isInitialized) prefs.edit().putLong("dcamp_last_update_check", v).apply() }
+
     /** Per-context composer draft (keyed). */
     fun getDraft(key: String): String = if (::prefs.isInitialized) prefs.getString("draft_$key", "") ?: "" else ""
     fun setDraft(key: String, html: String) { if (::prefs.isInitialized) prefs.edit().putString("draft_$key", html).apply() }

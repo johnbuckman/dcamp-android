@@ -33,6 +33,7 @@ private const val IDLE = 0
 private const val PROMPT = 1
 private const val DOWNLOADING = 2
 private const val FAILED = 3
+private const val WEEK_MS = 7L * 24 * 60 * 60 * 1000
 
 /**
  * On launch, checks GitHub for a newer release; if found (and not already dismissed), offers to
@@ -60,8 +61,24 @@ fun UpdateGate() {
         else { pendingApk = f; permLauncher.launch(Updater.unknownSourcesSettings(ctx)) }
     }
 
-    LaunchedEffect(Unit) {
-        Updater.check()?.let { info = it; phase = PROMPT }
+    // Check when the app comes to the foreground, throttled to at most once a week (and skipped
+    // while offline, so a missed week retries on the next resume rather than burning the window).
+    val lifecycleOwner = androidx.compose.ui.platform.LocalLifecycleOwner.current
+    androidx.compose.runtime.DisposableEffect(lifecycleOwner) {
+        val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
+            if (event == androidx.lifecycle.Lifecycle.Event.ON_RESUME && phase == IDLE) {
+                scope.launch {
+                    val now = System.currentTimeMillis()
+                    if (com.decentespresso.dcamp.api.Services.connectivity.isOnline.value &&
+                        now - AppConfig.lastUpdateCheck >= WEEK_MS) {
+                        AppConfig.lastUpdateCheck = now
+                        Updater.check()?.let { info = it; phase = PROMPT }
+                    }
+                }
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
 
     val i = info
@@ -74,10 +91,6 @@ fun UpdateGate() {
             Column {
                 Text(T("You have version {cur}, version {new} is available.",
                     "cur" to com.decentespresso.dcamp.BuildConfig.VERSION_NAME, "new" to i.version))
-                if (i.notes.isNotEmpty()) {
-                    Spacer(Modifier.height(8.dp))
-                    Text(i.notes, fontSize = 13.sp, maxLines = 6)
-                }
                 if (phase == DOWNLOADING) {
                     Spacer(Modifier.height(14.dp))
                     LinearProgressIndicator(progress = { progress }, modifier = Modifier.fillMaxWidth())
