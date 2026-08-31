@@ -121,9 +121,17 @@ fun ChatView(session: SessionStore.State) {
                 Divider(color = c.line)
             }
         }
-        ComposerPlaceholder(session.canPost,
-            T("You have read-only access — chat is for current Decent machine owners."),
-            T("Message the room… (rich text, @mention)"))
+        if (session.canPost) {
+            val model = remember { ComposerModel() }
+            InlineComposer(T("Message the room… (rich text, @mention)"), model) { html ->
+                runCatching { Services.api.chatPost(bodyHTML = html) }.isSuccess.also {
+                    if (it) runCatching { Services.api.chatLines() }.getOrNull()?.let { r -> lines.clear(); lines.addAll(r.lines) }
+                }
+            }
+        } else {
+            ComposerPlaceholder(false,
+                T("You have read-only access — chat is for current Decent machine owners."), "")
+        }
     }
 }
 
@@ -232,7 +240,14 @@ fun DMThreadView(convoID: Int, session: SessionStore.State) {
                 DMBubble(m, showSender = thread.members.size > 2)
             }
         }
-        ComposerPlaceholder(session.canPost, "", T("Write a direct message… (rich text, @mention)"))
+        if (session.canPost) {
+            val model = remember(convoID) { ComposerModel() }
+            InlineComposer(T("Write a direct message… (rich text, @mention)"), model) { html ->
+                runCatching { Services.api.dmSend(convoID, html) }.isSuccess.also {
+                    if (it) runCatching { Services.api.dmThread(convoID) }.getOrNull()?.let { t -> thread = t }
+                }
+            }
+        }
     }
 }
 

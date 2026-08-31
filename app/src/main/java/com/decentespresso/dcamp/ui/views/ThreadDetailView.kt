@@ -135,7 +135,20 @@ fun ThreadDetailView(messageID: Int, session: SessionStore.State) {
                         }
                     }
                 }
-                item { ComposerSectionPlaceholder(session) }
+                item {
+                    if (session.canPost) {
+                        val model = remember(currentID) { ComposerModel() }
+                        Column(Modifier.fillMaxWidth().padding(top = 6.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Text(T("Add a comment"), fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = c.ink)
+                            InlineComposer(T("Write a comment… (rich text, @mention)"), model) { html ->
+                                val r = runCatching { Services.api.createComment(currentID, html) }.getOrNull()
+                                if (r?.id != null) { scope.launch { load() }; true } else false
+                            }
+                        }
+                    } else {
+                        ReadOnlyNotice()
+                    }
+                }
             }
         }
         if (loading && message == null) {
@@ -235,21 +248,11 @@ private fun CommentMenu(cm: Comment, session: SessionStore.State, onChange: () -
 }
 
 @Composable
-private fun ComposerSectionPlaceholder(session: SessionStore.State) {
+private fun ReadOnlyNotice() {
     val c = DcampTheme.colors
-    if (session.canPost) {
-        // Full composer arrives in Phase 5.
-        Column(Modifier.fillMaxWidth().padding(top = 6.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text(T("Add a comment"), fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = c.ink)
-            Box(Modifier.fillMaxWidth().background(c.panel, RoundedCornerShape(14.dp)).padding(16.dp)) {
-                Text(T("Write a comment… (rich text, @mention)"), color = c.muted, fontSize = 15.sp)
-            }
-        }
-    } else {
-        Row(Modifier.fillMaxWidth().dcCard().padding(14.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-            Icon(Icons.Filled.Lock, contentDescription = null, tint = c.muted, modifier = Modifier.size(18.dp))
-            Text(T("You have read-only access — posting is for current Decent machine owners."), fontSize = 13.sp, color = c.muted)
-        }
+    Row(Modifier.fillMaxWidth().dcCard().padding(14.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+        Icon(Icons.Filled.Lock, contentDescription = null, tint = c.muted, modifier = Modifier.size(18.dp))
+        Text(T("You have read-only access — posting is for current Decent machine owners."), fontSize = 13.sp, color = c.muted)
     }
 }
 
