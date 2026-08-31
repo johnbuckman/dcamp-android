@@ -59,6 +59,24 @@ sealed class SummaryKind {
     data object Chat : SummaryKind()
 }
 
+fun SummaryKind.label(): String = when (this) {
+    is SummaryKind.Home -> T("Diaspora summary")
+    is SummaryKind.Forum -> name
+    is SummaryKind.Thread -> T("Thread summary")
+    is SummaryKind.Chat -> T("Chat summary")
+}
+
+/** The summary pinned to the tablet side panel (the web's "Show in sidebar"). */
+class SummaryPin {
+    var kind by mutableStateOf<SummaryKind?>(null)
+    var days by mutableStateOf(7)
+    var title by mutableStateOf("Summary")
+    val visible: Boolean get() = kind != null
+    fun clear() { kind = null }
+}
+
+val LocalSummaryPin = androidx.compose.runtime.staticCompositionLocalOf { SummaryPin() }
+
 object SummaryLoader {
     val windows = listOf(1, 2, 3, 5, 7, 10, 14, 21, 30)
 
@@ -119,6 +137,12 @@ fun SummarizeBar(kind: SummaryKind) {
             }
             DCPrimaryButton(onClick = { if (expanded) expanded = false else { expanded = true; reload() } }) {
                 Text(if (expanded) T("Hide") else T("Summarize"), fontSize = 15.sp, fontWeight = FontWeight.Bold, color = Color.White)
+            }
+            val wide = androidx.compose.ui.platform.LocalConfiguration.current.screenWidthDp >= 600
+            val pin = LocalSummaryPin.current
+            if (expanded && wide) {
+                Text("⇤ ${T("Show in sidebar")}", color = c.link, fontSize = 13.sp, fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier.clickable { pin.kind = kind; pin.days = days; pin.title = kind.label(); expanded = false })
             }
             Spacer(Modifier.weight(1f))
         }
@@ -236,6 +260,36 @@ private fun SummarySegmented(options: List<Pair<String, String>>, selected: Stri
                 color = if (active) Color.White else c.inkSoft, textAlign = androidx.compose.ui.text.style.TextAlign.Center,
                 modifier = Modifier.weight(1f).background(if (active) c.accent else Color.Transparent, RoundedCornerShape(8.dp))
                     .clickable { onSelect(value) }.padding(vertical = 8.dp))
+        }
+    }
+}
+
+/** Persistent tablet side panel showing the pinned summary. */
+@Composable
+fun SummarySidebarView(pin: SummaryPin) {
+    val c = DcampTheme.colors
+    var html by remember { mutableStateOf<String?>(null) }
+    var loading by remember { mutableStateOf(true) }
+    val key = "${pin.kind}-${pin.days}"
+    androidx.compose.runtime.LaunchedEffect(key) {
+        val k = pin.kind ?: return@LaunchedEffect
+        loading = true
+        html = SummaryLoader.load(k, pin.days).first
+        loading = false
+    }
+    Column(Modifier.fillMaxSize().background(c.bg)) {
+        Row(Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            Text("✨", fontSize = 15.sp)
+            Text(pin.title, fontSize = 15.sp, fontWeight = FontWeight.Bold, color = c.ink, maxLines = 1, modifier = Modifier.weight(1f))
+            Text("✕", color = c.muted, fontSize = 16.sp, modifier = Modifier.clickable { pin.clear() }.padding(4.dp))
+        }
+        androidx.compose.material3.Divider(color = c.line)
+        Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(14.dp)) {
+            if (loading) {
+                CircularProgressIndicator(strokeWidth = 2.dp, color = c.accent, modifier = Modifier.size(20.dp).padding(top = 20.dp))
+            } else {
+                html?.let { TrixContentView(it) }
+            }
         }
     }
 }

@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
@@ -43,6 +44,7 @@ import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -73,6 +75,13 @@ fun MainView(session: SessionStore, state: SessionStore.State) {
     val c = DcampTheme.colors
     val router = remember { Router() }
     val forumFilter = remember { com.decentespresso.dcamp.ui.ForumFilterStore() }
+    val summaryPin = remember { SummaryPin() }
+    val wide = androidx.compose.ui.platform.LocalConfiguration.current.screenWidthDp >= 600
+    val scope = androidx.compose.runtime.rememberCoroutineScope()
+    val online by com.decentespresso.dcamp.api.Services.connectivity.isOnline.collectAsState()
+    // Reconnecting after an offline launch (or a dropped connection that left us with no data)
+    // reloads the bootstrap so the forum fills in behind the dismissing offline panel.
+    androidx.compose.runtime.LaunchedEffect(online) { if (online && state.boards.isEmpty()) session.refresh() }
     val top = router.backStack.lastOrNull()
 
     BackHandler(enabled = router.backStack.isNotEmpty()) { router.pop() }
@@ -96,7 +105,9 @@ fun MainView(session: SessionStore, state: SessionStore.State) {
     }
 
     androidx.compose.runtime.CompositionLocalProvider(LocalRouter provides router,
-        com.decentespresso.dcamp.ui.LocalForumFilter provides forumFilter) {
+        com.decentespresso.dcamp.ui.LocalForumFilter provides forumFilter,
+        LocalSummaryPin provides summaryPin) {
+        Box(Modifier.fillMaxSize()) {
         Column(Modifier.fillMaxSize().background(c.bg)) {
             TopBar(session, state, showBack = router.backStack.isNotEmpty(), onBack = { router.pop() })
             toast?.let { n ->
@@ -106,7 +117,12 @@ fun MainView(session: SessionStore, state: SessionStore.State) {
                         ?: com.decentespresso.dcamp.api.DcampRoute.dmID(n.route)?.let { router.push(Dest.Dm(it)) }
                 }
             }
-            Box(Modifier.fillMaxSize()) {
+            Row(Modifier.fillMaxSize()) {
+                if (wide && summaryPin.visible) {
+                    Box(Modifier.width(340.dp).fillMaxSize()) { SummarySidebarView(summaryPin) }
+                    androidx.compose.material3.Divider(Modifier.fillMaxHeight().width(1.dp), color = c.line)
+                }
+            Box(Modifier.weight(1f).fillMaxSize()) {
                 when (val d = top) {
                     null -> ForumsHomeView(session, state)
                     is Dest.Board -> {
@@ -125,6 +141,12 @@ fun MainView(session: SessionStore, state: SessionStore.State) {
                     Dest.Help -> HelpView()
                 }
             }
+            }
+        }
+        if (!online) OfflineView(onRetry = {
+            com.decentespresso.dcamp.api.Services.connectivity.recheck()
+            scope.launch { session.refresh() }
+        })
         }
     }
 

@@ -8,11 +8,14 @@ object Services {
         private set
     lateinit var session: SessionStore
         private set
+    lateinit var connectivity: Connectivity
+        private set
 
     fun init(context: Context) {
         AppConfig.init(context)
         val tokenStore = TokenStore(context)
         api = DcampApi(tokenStore)
         session = SessionStore(api, SessionStore.deviceID(context))
+        connectivity = Connectivity(context).also { it.start() }
     }
 }

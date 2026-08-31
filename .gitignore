@@ -11,3 +11,7 @@ local.keystore.properties
 *.keystore
 *.jks
 app/release/
+
+# Build output (was partially tracked)
+/build/
+app/build/

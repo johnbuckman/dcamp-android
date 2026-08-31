@@ -32,13 +32,23 @@ class SessionStore(private val api: DcampApi, private val deviceID: String) {
     private val _state = MutableStateFlow(State())
     val state: StateFlow<State> = _state.asStateFlow()
 
+    /** ApiException.code from the most recent loadBootstrap failure (null on success). */
+    var lastErrorCode: String? = null
+        private set
+
     /** Called once on launch: resume a saved token or show the login screen. */
     suspend fun start() {
         if (api.isAuthenticated) {
-            // On launch a bootstrap failure means the SAVED token is stale → log out.
             if (!loadBootstrap()) {
-                api.setToken(null)
-                _state.update { it.copy(phase = Phase.LOGGED_OUT) }
+                // Only a real auth rejection (401/403) means the SAVED token is stale → log out.
+                // A network/offline failure must NOT nuke the session: keep the token, enter the
+                // app optimistically (the offline overlay shows), and reload once back online.
+                if (lastErrorCode == "http401" || lastErrorCode == "http403") {
+                    api.setToken(null)
+                    _state.update { it.copy(phase = Phase.LOGGED_OUT) }
+                } else {
+                    _state.update { it.copy(phase = Phase.LOGGED_IN) }
+                }
             }
         } else {
             _state.update { it.copy(phase = Phase.LOGGED_OUT) }
@@ -105,8 +115,10 @@ class SessionStore(private val api: DcampApi, private val deviceID: String) {
                     lang = b.lang ?: "en",
                 )
             }
+            lastErrorCode = null
             true
         } catch (e: Exception) {
+            lastErrorCode = (e as? ApiException)?.code
             _state.update { it.copy(errorMessage = (e as? ApiException)?.messageText ?: e.message) }
             false
         }

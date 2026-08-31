@@ -77,6 +77,14 @@ fun ThreadDetailView(messageID: Int, session: SessionStore.State) {
     val composerModel = remember(currentID) { ComposerModel() }
     var editMode by remember { mutableStateOf<ComposeMode?>(null) }
     var offtopicCommentID by remember { mutableStateOf<Int?>(null) }
+    val listState = androidx.compose.foundation.lazy.rememberLazyListState()
+    // Quote a message/comment: buffer the web-parity quote into the composer and scroll it into
+    // view (the composer is the last lazy item, so quoting the top-of-thread message must bring
+    // it on-screen). src is the source permalink so "wrote:" links back to the original.
+    fun quoteInto(rawHtml: String, aid: Int?, aname: String?, src: String?) {
+        composerModel.insertQuote(quoteHtml(rawHtml, aid, aname, src))
+        scope.launch { listState.animateScrollToItem(Int.MAX_VALUE) }
+    }
 
     suspend fun load() {
         loading = true
@@ -116,7 +124,7 @@ fun ThreadDetailView(messageID: Int, session: SessionStore.State) {
     val firstUnread = lastVisit?.takeIf { it > 0 }?.let { lv -> visibleComments.firstOrNull { (it.createdAt ?: 0) > lv }?.id }
 
     Box(Modifier.fillMaxSize().background(c.bg)) {
-        LazyColumn(contentPadding = androidx.compose.foundation.layout.PaddingValues(18.dp),
+        LazyColumn(state = listState, contentPadding = androidx.compose.foundation.layout.PaddingValues(18.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp)) {
             item { SummarizeBar(SummaryKind.Thread(currentID)) }
             message?.let { m ->
@@ -135,7 +143,7 @@ fun ThreadDetailView(messageID: Int, session: SessionStore.State) {
                 }
                 item { MessageCard(m, session, onChange = { scope.launch { load() } }, onDeleted = { router.pop() },
                     onEdit = { editMode = ComposeMode.EditThread(m) },
-                    onQuote = { composerModel.insertQuote(quoteHtml(m.html)) }) }
+                    onQuote = { quoteInto(m.html, m.author?.id, m.author?.name, "#/message/$currentID") }) }
                 if (visibleComments.isNotEmpty()) {
                     item {
                         Text(T(if (visibleComments.size == 1) "{n} comment" else "{n} comments", "n" to "${visibleComments.size}"),
@@ -147,7 +155,7 @@ fun ThreadDetailView(messageID: Int, session: SessionStore.State) {
                                 if (cm.id == firstUnread) SinceLastVisitDivider()
                                 CommentRow(cm, session, onChange = { scope.launch { load() } },
                                     onEdit = { editMode = ComposeMode.EditComment(cm) },
-                                    onQuote = { composerModel.insertQuote(quoteHtml(cm.html)) })
+                                    onQuote = { quoteInto(cm.html, cm.author?.id, cm.author?.name, "#/message/$currentID?c=${cm.id}") })
                                 Divider(color = c.line)
                             }
                         }
@@ -220,9 +228,19 @@ private fun MessageCard(m: MessageDetail, session: SessionStore.State, onChange:
 }
 
 /** Wrap a post's content as a blockquote for the reply composer (plain-text, escaped). */
-fun quoteHtml(html: String): String {
-    val text = PlainText.strip(html).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
-    return "<p>$text</p>"
+private fun escQuote(s: String): String = s
+    .replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+    .replace("\"", "&quot;").replace("'", "&#39;")
+
+/** Build a quote matching the web (dcamp.js insertQuote): an "@Author wrote:" attribution line —
+ *  the author as a real mention link, "wrote:" linking back to the source — followed by a
+ *  blockquote of the plain-text selection. */
+fun quoteHtml(rawHtml: String, aid: Int?, aname: String?, src: String?): String {
+    val body = "<blockquote>" + escQuote(PlainText.strip(rawHtml)).replace(Regex("\\n+"), "<br>") + "</blockquote>"
+    if (aid == null || aname.isNullOrEmpty()) return body
+    val wrote = if (!src.isNullOrEmpty()) "<a href=\"${escQuote(src)}\">${escQuote(T("wrote"))}:</a>"
+                else "${escQuote(T("wrote"))}:"
+    return "<a href=\"#/p/$aid\">@${escQuote(aname)}</a> $wrote<br>$body"
 }
 
 @Composable

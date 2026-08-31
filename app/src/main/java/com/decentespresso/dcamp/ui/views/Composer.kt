@@ -63,6 +63,7 @@ class ComposerModel {
     var submitRequested by mutableStateOf(0)
     var draftKey: String? = null   // per-context draft persistence
     private var lastHtml = ""
+    private var pendingQuote: String? = null   // quote requested before the editor was ready
 
     /** Restore this context's saved draft into the editor (call once ready). */
     fun loadDraft() {
@@ -80,7 +81,15 @@ class ComposerModel {
     fun focus() = eval("dcampFocus()")
     fun insertMention(id: Int, name: String) { eval("dcampInsertMention($id, ${jsStr(name)})"); mentionQuery = null }
     fun insertImage(url: String) = eval("dcampInsertImage(${jsStr(url)})")
-    fun insertQuote(html: String) = eval("dcampInsertQuote(${jsStr(html)})")
+    /** Insert a blockquote. If the editor isn't composed/ready yet (its lazy item is
+     *  off-screen), buffer it and apply once the editor reports ready. */
+    fun insertQuote(html: String) {
+        if (webView != null && ready) eval("dcampInsertQuote(${jsStr(html)})")
+        else pendingQuote = html
+    }
+    /** Apply a quote buffered while the editor was loading — called after loadDraft so the
+     *  quote appends to (rather than being clobbered by) a restored draft. */
+    fun drainPendingQuote() { pendingQuote?.let { val h = it; pendingQuote = null; eval("dcampInsertQuote(${jsStr(h)})") } }
     fun loadHTML(html: String) { eval("dcampLoadHTML(${jsStr(html)})"); lastHtml = html }
     fun clear() { eval("dcampClear()"); lastHtml = "" }
 
@@ -155,12 +164,11 @@ fun InlineComposer(placeholder: String, model: ComposerModel, draftKey: String? 
         }
     }
 
-    // Apply placeholder once the editor is ready; restore any draft; observe ⌘↵ submit.
+    // Apply placeholder + restore draft each time the editor reports ready — including after the
+    // lazy item is disposed and its WebView recreated (ready flips false→true again).
     LaunchedEffect(model) {
-        repeat(40) {
-            if (model.ready) { model.setPlaceholder(placeholder); model.draftKey = draftKey; model.loadDraft(); return@LaunchedEffect }
-            delay(150)
-        }
+        model.draftKey = draftKey
+        snapshotFlow { model.ready }.collect { r -> if (r) { model.setPlaceholder(placeholder); model.loadDraft(); model.drainPendingQuote() } }
     }
     LaunchedEffect(model) { snapshotFlow { model.submitRequested }.collect { if (it > 0) send() } }
 
@@ -191,10 +199,14 @@ internal fun ComposerWebView(model: ComposerModel, modifier: Modifier = Modifier
                 settings.domStorageEnabled = true
                 setBackgroundColor(android.graphics.Color.TRANSPARENT)
                 addJavascriptInterface(ComposerBridge(model), "AndroidComposer")
+                model.ready = false            // fresh page: JS bridge not loaded yet
                 model.webView = this
                 loadUrl("file:///android_asset/editor/editor.html")
             }
         },
+        // When this lazy item scrolls off-screen it's disposed; drop the stale WebView so a
+        // later insertQuote/loadHTML buffers instead of evaluating into a dead page.
+        onRelease = { web -> if (model.webView === web) { model.webView = null; model.ready = false } },
     )
 }
 
