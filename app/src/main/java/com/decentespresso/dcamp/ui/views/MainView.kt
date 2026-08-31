@@ -147,6 +147,7 @@ fun MainView(session: SessionStore, state: SessionStore.State) {
             com.decentespresso.dcamp.api.Services.connectivity.recheck()
             scope.launch { session.refresh() }
         })
+        UpdateGate()
         }
     }
 

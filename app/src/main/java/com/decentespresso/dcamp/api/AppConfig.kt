@@ -65,6 +65,11 @@ object AppConfig {
         get() = if (::prefs.isInitialized) prefs.getString("dcamp_forum_filter", "") ?: "" else ""
         set(v) { if (::prefs.isInitialized) prefs.edit().putString("dcamp_forum_filter", v).apply() }
 
+    /** Latest GitHub release version the user tapped "Later" on — so we don't nag again for it. */
+    var dismissedUpdate: String
+        get() = if (::prefs.isInitialized) prefs.getString("dcamp_dismissed_update", "") ?: "" else ""
+        set(v) { if (::prefs.isInitialized) prefs.edit().putString("dcamp_dismissed_update", v).apply() }
+
     /** Per-context composer draft (keyed). */
     fun getDraft(key: String): String = if (::prefs.isInitialized) prefs.getString("draft_$key", "") ?: "" else ""
     fun setDraft(key: String, html: String) { if (::prefs.isInitialized) prefs.edit().putString("draft_$key", html).apply() }
