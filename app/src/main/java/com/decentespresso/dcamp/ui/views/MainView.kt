@@ -76,8 +76,11 @@ fun MainView(session: SessionStore, state: SessionStore.State) {
             Box(Modifier.fillMaxSize()) {
                 when (val d = top) {
                     null -> ForumsHomeView(session, state)
-                    is Dest.Board -> PlaceholderScreen("Forum #${d.id}")
-                    is Dest.Thread -> PlaceholderScreen("Thread #${d.id}")
+                    is Dest.Board -> {
+                        val board = state.boards.firstOrNull { it.id == d.id }
+                        if (board != null) ThreadListView(board, state) else PlaceholderScreen("Forum #${d.id}")
+                    }
+                    is Dest.Thread -> ThreadDetailView(d.id, state)
                     Dest.Chat -> PlaceholderScreen("Chat Room")
                     Dest.Dms -> PlaceholderScreen("Direct Messages")
                     is Dest.Dm -> PlaceholderScreen("DM #${d.id}")
@@ -154,7 +157,7 @@ private fun ForumsHomeView(session: SessionStore, state: SessionStore.State) {
     }
 }
 
-private fun forumIcon(board: Board): ImageVector = when (board.slug) {
+fun forumIconPublic(board: Board): ImageVector = when (board.slug) {
     "general-forum" -> Icons.Filled.Forum
     "most-popular-topics" -> Icons.Filled.LocalFireDepartment
     "problems" -> Icons.Filled.Build
@@ -173,7 +176,7 @@ private fun ForumCard(board: Board) {
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         Box(Modifier.size(38.dp).clip(RoundedCornerShape(10.dp)).background(tint), contentAlignment = Alignment.Center) {
-            Icon(forumIcon(board), contentDescription = null, tint = Color.White, modifier = Modifier.size(20.dp))
+            Icon(forumIconPublic(board), contentDescription = null, tint = Color.White, modifier = Modifier.size(20.dp))
         }
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             Text(T(board.name), fontSize = 19.sp, fontWeight = FontWeight.Bold, color = c.ink)

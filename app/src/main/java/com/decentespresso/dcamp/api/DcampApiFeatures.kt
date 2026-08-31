@@ -9,6 +9,12 @@ import kotlinx.serialization.encodeToString
  * Extension functions on the public call/rawData surface.
  */
 
+// MARK: - Threads / messages
+
+suspend fun DcampApi.messagesPage(params: Map<String, String>): MessagesPage = call("messages", params)
+
+suspend fun DcampApi.messageDetail(id: Int): MessageResponse = call("message", mapOf("id" to id.toString()))
+
 // MARK: - Summaries
 
 suspend fun DcampApi.homeSummaryInfo(): SummaryInfo =
