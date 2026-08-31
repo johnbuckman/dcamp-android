@@ -1,0 +1,18 @@
+[
+    {
+        "merged": "com.decentespresso.dcamp.app-release-60:/drawable_ic_launcher_foreground.xml.flat",
+        "source": "com.decentespresso.dcamp.app-main-61:/drawable/ic_launcher_foreground.xml"
+    },
+    {
+        "merged": "com.decentespresso.dcamp.app-release-60:/mipmap-anydpi-v26_ic_launcher_round.xml.flat",
+        "source": "com.decentespresso.dcamp.app-main-61:/mipmap-anydpi-v26/ic_launcher_round.xml"
+    },
+    {
+        "merged": "com.decentespresso.dcamp.app-release-60:/xml_network_security_config.xml.flat",
+        "source": "com.decentespresso.dcamp.app-main-61:/xml/network_security_config.xml"
+    },
+    {
+        "merged": "com.decentespresso.dcamp.app-release-60:/mipmap-anydpi-v26_ic_launcher.xml.flat",
+        "source": "com.decentespresso.dcamp.app-main-61:/mipmap-anydpi-v26/ic_launcher.xml"
+    }
+]
