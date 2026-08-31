@@ -41,6 +41,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.decentespresso.dcamp.api.Comment
 import com.decentespresso.dcamp.api.MessageDetail
+import com.decentespresso.dcamp.api.PlainText
 import com.decentespresso.dcamp.api.Boosts
 import com.decentespresso.dcamp.api.Services
 import com.decentespresso.dcamp.api.SessionStore
@@ -48,6 +49,8 @@ import com.decentespresso.dcamp.api.messageDetail
 import com.decentespresso.dcamp.api.messagePin
 import com.decentespresso.dcamp.api.messageSetStatus
 import com.decentespresso.dcamp.api.messageStatus
+import com.decentespresso.dcamp.api.offtopicMove
+import com.decentespresso.dcamp.api.offtopicSuggest
 import com.decentespresso.dcamp.api.commentDelete
 import com.decentespresso.dcamp.ui.LocalRouter
 import com.decentespresso.dcamp.ui.T
@@ -71,6 +74,9 @@ fun ThreadDetailView(messageID: Int, session: SessionStore.State) {
     val comments = remember { androidx.compose.runtime.mutableStateListOf<Comment>() }
     var lastVisit by remember { mutableStateOf<Int?>(null) }
     var loading by remember { mutableStateOf(false) }
+    val composerModel = remember(currentID) { ComposerModel() }
+    var editMode by remember { mutableStateOf<ComposeMode?>(null) }
+    var offtopicCommentID by remember { mutableStateOf<Int?>(null) }
 
     suspend fun load() {
         loading = true
@@ -120,7 +126,9 @@ fun ThreadDetailView(messageID: Int, session: SessionStore.State) {
                         }
                     }
                 }
-                item { MessageCard(m, session, onChange = { scope.launch { load() } }, onDeleted = { router.pop() }) }
+                item { MessageCard(m, session, onChange = { scope.launch { load() } }, onDeleted = { router.pop() },
+                    onEdit = { editMode = ComposeMode.EditThread(m) },
+                    onQuote = { composerModel.insertQuote(quoteHtml(m.html)) }) }
                 if (comments.isNotEmpty()) {
                     item {
                         Text(T(if (comments.size == 1) "{n} comment" else "{n} comments", "n" to "${comments.size}"),
@@ -130,7 +138,9 @@ fun ThreadDetailView(messageID: Int, session: SessionStore.State) {
                         Column(Modifier.fillMaxWidth().dcCard().padding(4.dp)) {
                             comments.forEach { cm ->
                                 if (cm.id == firstUnread) SinceLastVisitDivider()
-                                CommentRow(cm, session, onChange = { scope.launch { load() } })
+                                CommentRow(cm, session, onChange = { scope.launch { load() } },
+                                    onEdit = { editMode = ComposeMode.EditComment(cm) },
+                                    onQuote = { composerModel.insertQuote(quoteHtml(cm.html)) })
                                 Divider(color = c.line)
                             }
                         }
@@ -138,12 +148,15 @@ fun ThreadDetailView(messageID: Int, session: SessionStore.State) {
                 }
                 item {
                     if (session.canPost) {
-                        val model = remember(currentID) { ComposerModel() }
                         Column(Modifier.fillMaxWidth().padding(top = 6.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                             Text(T("Add a comment"), fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = c.ink)
-                            InlineComposer(T("Write a comment… (rich text, @mention)"), model) { html ->
+                            InlineComposer(T("Write a comment… (rich text, @mention)"), composerModel) { html ->
                                 val r = runCatching { Services.api.createComment(currentID, html) }.getOrNull()
-                                if (r?.id != null) { scope.launch { load() }; true } else false
+                                if (r?.id != null) {
+                                    scope.launch { load() }
+                                    scope.launch { if (Services.api.offtopicSuggest(r.id).suggested) offtopicCommentID = r.id }
+                                    true
+                                } else false
                             }
                         }
                     } else {
@@ -156,10 +169,30 @@ fun ThreadDetailView(messageID: Int, session: SessionStore.State) {
             CircularProgressIndicator(color = c.accent, modifier = Modifier.align(Alignment.Center))
         }
     }
+
+    editMode?.let { mode ->
+        ComposeView(mode, session, onPosted = { editMode = null; scope.launch { load() } }, onDismiss = { editMode = null })
+    }
+
+    offtopicCommentID?.let { cid ->
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { offtopicCommentID = null },
+            title = { Text(T("Move to its own thread?")) },
+            text = { Text(T("This comment looks like it’s about something else. Move it to its own thread?")) },
+            confirmButton = {
+                androidx.compose.material3.TextButton(onClick = {
+                    val id = cid; offtopicCommentID = null
+                    scope.launch { val r = Services.api.offtopicMove(id); if (r.id != null) currentID = r.id!! else load() }
+                }) { Text(T("Move it")) }
+            },
+            dismissButton = { androidx.compose.material3.TextButton(onClick = { offtopicCommentID = null }) { Text(T("Keep it here")) } },
+        )
+    }
 }
 
 @Composable
-private fun MessageCard(m: MessageDetail, session: SessionStore.State, onChange: () -> Unit, onDeleted: () -> Unit) {
+private fun MessageCard(m: MessageDetail, session: SessionStore.State, onChange: () -> Unit, onDeleted: () -> Unit,
+                        onEdit: () -> Unit, onQuote: () -> Unit) {
     val c = DcampTheme.colors
     val router = LocalRouter.current
     Column(Modifier.fillMaxWidth().dcCard().padding(18.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
@@ -172,15 +205,21 @@ private fun MessageCard(m: MessageDetail, session: SessionStore.State, onChange:
                 }
                 AuthorLine(person = m.author, date = m.createdAt)
             }
-            MessageMenu(m, session, onChange, onDeleted)
+            MessageMenu(m, session, onChange, onDeleted, onEdit, onQuote)
         }
         TranslatableText(original = m.html, translated = m.bodyTr)
         BoostBar("message", m.id, m.boosts ?: Boosts()) { onChange() }
     }
 }
 
+/** Wrap a post's content as a blockquote for the reply composer (plain-text, escaped). */
+fun quoteHtml(html: String): String {
+    val text = PlainText.strip(html).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+    return "<p>$text</p>"
+}
+
 @Composable
-private fun CommentRow(cm: Comment, session: SessionStore.State, onChange: () -> Unit) {
+private fun CommentRow(cm: Comment, session: SessionStore.State, onChange: () -> Unit, onEdit: () -> Unit, onQuote: () -> Unit) {
     val c = DcampTheme.colors
     val router = LocalRouter.current
     Row(Modifier.fillMaxWidth().padding(14.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -188,7 +227,7 @@ private fun CommentRow(cm: Comment, session: SessionStore.State, onChange: () ->
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Box(Modifier.weight(1f)) { AuthorLine(person = cm.author, date = cm.createdAt) }
-                CommentMenu(cm, session, onChange)
+                CommentMenu(cm, session, onChange, onEdit, onQuote)
             }
             TranslatableText(original = cm.html, translated = cm.bodyTr)
             BoostBar("comment", cm.id, cm.boosts ?: Boosts()) { onChange() }
@@ -197,7 +236,8 @@ private fun CommentRow(cm: Comment, session: SessionStore.State, onChange: () ->
 }
 
 @Composable
-private fun MessageMenu(m: MessageDetail, session: SessionStore.State, onChange: () -> Unit, onDeleted: () -> Unit) {
+private fun MessageMenu(m: MessageDetail, session: SessionStore.State, onChange: () -> Unit, onDeleted: () -> Unit,
+                        onEdit: () -> Unit, onQuote: () -> Unit) {
     val c = DcampTheme.colors
     val scope = rememberCoroutineScope()
     val clipboard = LocalClipboardManager.current
@@ -213,7 +253,11 @@ private fun MessageMenu(m: MessageDetail, session: SessionStore.State, onChange:
                 clipboard.setText(AnnotatedString("https://decentespresso.com/support/dcamp/#/message/${m.id}"))
                 open = false
             })
+            if (session.canPost) {
+                DropdownMenuItem(text = { Text(T("Quote & reply")) }, onClick = { open = false; onQuote() })
+            }
             if (canModify) {
+                DropdownMenuItem(text = { Text(T("Edit")) }, onClick = { open = false; onEdit() })
                 if (isProblems) {
                     DropdownMenuItem(text = { Text(T("Mark: Unsolved")) }, onClick = { open = false; scope.launch { Services.api.messageSetStatus(m.id, "unsolved"); onChange() } })
                     DropdownMenuItem(text = { Text(T("Mark: Solved")) }, onClick = { open = false; scope.launch { Services.api.messageSetStatus(m.id, "solved"); onChange() } })
@@ -229,7 +273,7 @@ private fun MessageMenu(m: MessageDetail, session: SessionStore.State, onChange:
 }
 
 @Composable
-private fun CommentMenu(cm: Comment, session: SessionStore.State, onChange: () -> Unit) {
+private fun CommentMenu(cm: Comment, session: SessionStore.State, onChange: () -> Unit, onEdit: () -> Unit, onQuote: () -> Unit) {
     val c = DcampTheme.colors
     val scope = rememberCoroutineScope()
     val clipboard = LocalClipboardManager.current
@@ -243,7 +287,11 @@ private fun CommentMenu(cm: Comment, session: SessionStore.State, onChange: () -
                 clipboard.setText(AnnotatedString("https://decentespresso.com/support/dcamp/#/message/${cm.messageId ?: 0}?c=${cm.id}"))
                 open = false
             })
+            if (session.canPost) {
+                DropdownMenuItem(text = { Text(T("Quote & reply")) }, onClick = { open = false; onQuote() })
+            }
             if (canModify) {
+                DropdownMenuItem(text = { Text(T("Edit")) }, onClick = { open = false; onEdit() })
                 DropdownMenuItem(text = { Text(T("Delete")) }, onClick = { open = false; scope.launch { Services.api.commentDelete(cm.id); onChange() } })
             }
         }

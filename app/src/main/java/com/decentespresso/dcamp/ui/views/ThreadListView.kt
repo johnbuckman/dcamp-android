@@ -66,6 +66,7 @@ fun ThreadListView(board: Board, session: SessionStore.State) {
     var total by remember { mutableIntStateOf(0) }
     var loading by remember { mutableStateOf(false) }
     var statusFilter by remember { mutableStateOf("unsolved") }
+    var composing by remember { mutableStateOf(false) }
     val isProblems = board.name == "Problems"
 
     suspend fun load(reset: Boolean) {
@@ -93,7 +94,13 @@ fun ThreadListView(board: Board, session: SessionStore.State) {
                     Icon(forumIconPublic(board), contentDescription = null, tint = Color.White, modifier = Modifier.size(18.dp))
                 }
                 Spacer(Modifier.size(10.dp))
-                Text(T(board.name), fontSize = 26.sp, fontWeight = FontWeight.Black, color = c.ink)
+                Text(T(board.name), fontSize = 26.sp, fontWeight = FontWeight.Black, color = c.ink,
+                    modifier = Modifier.weight(1f))
+                if (session.canPost) {
+                    com.decentespresso.dcamp.ui.theme.DCPrimaryButton(onClick = { composing = true }) {
+                        Text("+ ${T("New message")}", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                    }
+                }
             }
         }
         item { SummarizeBar(SummaryKind.Forum(board.id, board.name)); Spacer(Modifier.size(12.dp)) }
@@ -126,6 +133,12 @@ fun ThreadListView(board: Board, session: SessionStore.State) {
                 item { Box(Modifier.fillMaxWidth().padding(16.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator(color = c.accent) } }
             }
         }
+    }
+
+    if (composing) {
+        ComposeView(ComposeMode.NewThread(board), session,
+            onPosted = { newID -> composing = false; router.threadSiblings = rows.map { it.id }; router.push(Dest.Thread(newID)) },
+            onDismiss = { composing = false })
     }
 }
 

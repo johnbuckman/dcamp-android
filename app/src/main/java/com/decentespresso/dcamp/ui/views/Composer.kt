@@ -71,6 +71,7 @@ class ComposerModel {
     fun insertMention(id: Int, name: String) { eval("dcampInsertMention($id, ${jsStr(name)})"); mentionQuery = null }
     fun insertImage(url: String) = eval("dcampInsertImage(${jsStr(url)})")
     fun insertQuote(html: String) = eval("dcampInsertQuote(${jsStr(html)})")
+    fun loadHTML(html: String) { eval("dcampLoadHTML(${jsStr(html)})"); lastHtml = html }
     fun clear() { eval("dcampClear()"); lastHtml = "" }
 
     /** Read the editor's current HTML directly (Trix keeps it in sync), so posting never
@@ -164,7 +165,7 @@ fun InlineComposer(placeholder: String, model: ComposerModel, onSend: suspend (S
 
 @SuppressLint("SetJavaScriptEnabled")
 @Composable
-private fun ComposerWebView(model: ComposerModel, modifier: Modifier = Modifier) {
+internal fun ComposerWebView(model: ComposerModel, modifier: Modifier = Modifier) {
     AndroidView(
         modifier = modifier,
         factory = { ctx ->
@@ -182,7 +183,7 @@ private fun ComposerWebView(model: ComposerModel, modifier: Modifier = Modifier)
 
 /** Native @mention suggestion list shown over the composer while typing "@query". */
 @Composable
-private fun MentionOverlay(model: ComposerModel, modifier: Modifier = Modifier) {
+internal fun MentionOverlay(model: ComposerModel, modifier: Modifier = Modifier) {
     val c = DcampTheme.colors
     var results by remember { mutableStateOf<List<Person>>(emptyList()) }
 
