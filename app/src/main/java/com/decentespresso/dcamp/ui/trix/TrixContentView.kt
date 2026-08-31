@@ -62,7 +62,7 @@ import kotlinx.coroutines.launch
  * Ported from iOS TrixContentView.
  */
 @Composable
-fun TrixContentView(html: String, onRoute: ((String) -> Unit)? = null) {
+fun TrixContentView(html: String, onRoute: ((String) -> Unit)? = null, textColor: Color? = null) {
     val blocks = remember(html) { TrixParser.parse(html) }
     val router = LocalRouter.current
     val uriHandler = LocalUriHandler.current
@@ -88,7 +88,7 @@ fun TrixContentView(html: String, onRoute: ((String) -> Unit)? = null) {
     }
 
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        blocks.forEach { TrixBlockView(it, onLink) }
+        blocks.forEach { TrixBlockView(it, onLink, textColor) }
     }
 }
 
@@ -96,11 +96,11 @@ fun TrixContentView(html: String, onRoute: ((String) -> Unit)? = null) {
  * Shows machine-translated content by default (like the web) with a "Show original" toggle.
  */
 @Composable
-fun TranslatableText(original: String, translated: String?, onRoute: ((String) -> Unit)? = null) {
+fun TranslatableText(original: String, translated: String?, onRoute: ((String) -> Unit)? = null, textColor: Color? = null) {
     val hasTr = !translated.isNullOrEmpty() && translated != original
     var showOriginal by remember(original, translated) { mutableStateOf(false) }
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        TrixContentView(if (hasTr && !showOriginal) translated!! else original, onRoute)
+        TrixContentView(if (hasTr && !showOriginal) translated!! else original, onRoute, textColor)
         if (hasTr) {
             Text(
                 if (showOriginal) T("Show translation") else T("Translated · Show original"),
@@ -113,22 +113,23 @@ fun TranslatableText(original: String, translated: String?, onRoute: ((String) -
 }
 
 @Composable
-private fun TrixBlockView(block: TrixBlock, onLink: (String) -> Unit) {
+private fun TrixBlockView(block: TrixBlock, onLink: (String) -> Unit, textColor: Color? = null) {
     val c = DcampTheme.colors
+    val ink = textColor ?: c.ink
     when (block) {
         is TrixBlock.Paragraph ->
-            Text(TrixInline.parse(block.html, c, onLink), color = c.ink, fontSize = 15.sp, lineHeight = 22.sp)
+            Text(TrixInline.parse(block.html, c, onLink), color = ink, fontSize = 15.sp, lineHeight = 22.sp)
 
         is TrixBlock.Heading -> {
             val size = when (block.level) { 1 -> 26.sp; 2 -> 22.sp; else -> 19.sp }
-            Text(TrixInline.parse(block.html, c, onLink), color = c.ink, fontSize = size, fontWeight = FontWeight.Bold)
+            Text(TrixInline.parse(block.html, c, onLink), color = ink, fontSize = size, fontWeight = FontWeight.Bold)
         }
 
         is TrixBlock.Quote ->
             Row(Modifier.height(IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 Box(Modifier.width(3.dp).fillMaxHeight().background(c.muted.copy(alpha = 0.5f), RoundedCornerShape(2.dp)))
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    block.children.forEach { TrixBlockView(it, onLink) }
+                    block.children.forEach { TrixBlockView(it, onLink, textColor) }
                 }
             }
 
@@ -138,7 +139,7 @@ private fun TrixBlockView(block: TrixBlock, onLink: (String) -> Unit) {
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         Text(if (block.ordered) "${idx + 1}." else "•", color = c.muted, fontSize = 15.sp,
                             modifier = Modifier.width(20.dp))
-                        Text(TrixInline.parse(item, c, onLink), color = c.ink, fontSize = 15.sp, lineHeight = 22.sp)
+                        Text(TrixInline.parse(item, c, onLink), color = ink, fontSize = 15.sp, lineHeight = 22.sp)
                     }
                 }
             }

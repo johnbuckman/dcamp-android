@@ -81,9 +81,9 @@ fun MainView(session: SessionStore, state: SessionStore.State) {
                         if (board != null) ThreadListView(board, state) else PlaceholderScreen("Forum #${d.id}")
                     }
                     is Dest.Thread -> ThreadDetailView(d.id, state)
-                    Dest.Chat -> PlaceholderScreen("Chat Room")
-                    Dest.Dms -> PlaceholderScreen("Direct Messages")
-                    is Dest.Dm -> PlaceholderScreen("DM #${d.id}")
+                    Dest.Chat -> ChatView(state)
+                    Dest.Dms -> DMListView(state)
+                    is Dest.Dm -> DMThreadView(d.id, state)
                     Dest.Search -> PlaceholderScreen("Search")
                     Dest.Find -> PlaceholderScreen("Find forums")
                 }
