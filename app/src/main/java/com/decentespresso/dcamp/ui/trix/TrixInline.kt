@@ -119,18 +119,37 @@ object TrixInline {
         "brown" to Color(0xFF795548), "cyan" to Color.Cyan, "indigo" to Color(0xFF3F51B5),
     )
 
+    // A near-black or near-white author colour carries no real colour intent and
+    // breaks in one theme (near-black picked in light mode is invisible on the dark
+    // background, and vice-versa). Dropping these lets the text inherit the theme
+    // colour, legible in BOTH modes — the native counterpart of the web legibility
+    // guard. (We don't resolve the exact per-run background here, so this covers the
+    // common extreme case rather than a full contrast check.)
+    private fun isIllegibleExtreme(r: Double, g: Double, b: Double): Boolean =
+        (r < 40 && g < 40 && b < 40) || (r > 220 && g > 220 && b > 220)
+
+    private fun hexRgb(hex: String): Triple<Double, Double, Double>? {
+        var h = hex.removePrefix("#")
+        if (h.length == 3) h = h.map { "$it$it" }.joinToString("")
+        if (h.length != 6) return null
+        val n = h.toLongOrNull(16) ?: return null
+        return Triple(((n shr 16) and 0xff).toDouble(), ((n shr 8) and 0xff).toDouble(), (n and 0xff).toDouble())
+    }
+
     private fun cssColor(raw: String): Color? {
         val v = raw.trim().lowercase()
-        if (v.startsWith("#")) return hexColor(v)
+        if (v.startsWith("#")) {
+            hexRgb(v)?.let { if (isIllegibleExtreme(it.first, it.second, it.third)) return null }
+            return hexColor(v)
+        }
         if (v.startsWith("rgb")) {
             val nums = v.split(Regex("[^0-9.]")).filter { it.isNotEmpty() }
             if (nums.size >= 3) {
                 val r = nums[0].toDoubleOrNull() ?: return null
                 val g = nums[1].toDoubleOrNull() ?: return null
                 val b = nums[2].toDoubleOrNull() ?: return null
-                // Ignore near-black/near-white rgb() (the composer's default text color) so it
-                // inherits the bubble/column color instead of rendering black-on-blue.
-                if ((r < 20 && g < 20 && b < 20) || (r > 235 && g > 235 && b > 235)) return null
+                // near-black/near-white (e.g. the composer's default text colour) → inherit theme
+                if (isIllegibleExtreme(r, g, b)) return null
                 val a = if (nums.size >= 4) nums[3].toFloatOrNull() ?: 1f else 1f
                 return Color((r / 255).toFloat(), (g / 255).toFloat(), (b / 255).toFloat(), a)
             }

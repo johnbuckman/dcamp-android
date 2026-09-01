@@ -145,6 +145,7 @@ private fun TrixBlockView(block: TrixBlock, onLink: (String) -> Unit, textColor:
             }
 
         is TrixBlock.Image -> ZoomableTrixImage(block.url)
+        is TrixBlock.Video -> VideoBlock(block.url)
         is TrixBlock.YouTube -> YouTubeCard(block.id)
         is TrixBlock.Table -> TrixTableView(block.rowsHtml, onLink)
         TrixBlock.Rule -> Divider(color = c.line)
@@ -176,6 +177,32 @@ private fun TrixTableView(rows: List<List<String>>, onLink: (String) -> Unit) {
                 }
             }
         }
+    }
+}
+
+/**
+ * A video attachment (member phone clip / screen recording) that wasn't offloaded
+ * to YouTube — previously rendered as a bare "attachment" link the app couldn't
+ * play. Shows a play card; tapping opens the clip in the device's video player.
+ */
+@Composable
+private fun VideoBlock(url: String) {
+    val uriHandler = LocalUriHandler.current
+    val name = remember(url) {
+        url.substringAfterLast('/').substringBefore('?')
+            .let { runCatching { java.net.URLDecoder.decode(it, "UTF-8") }.getOrDefault(it) }
+    }
+    Column(
+        Modifier.fillMaxWidth().height(200.dp).clip(RoundedCornerShape(10.dp)).background(Color.Black)
+            .clickable { runCatching { uriHandler.openUri(url) } },
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center,
+    ) {
+        Icon(Icons.Filled.PlayCircle, contentDescription = "Play video", tint = Color.White.copy(alpha = 0.92f),
+            modifier = Modifier.width(52.dp).height(52.dp))
+        Spacer(Modifier.height(8.dp))
+        Text(name, color = Color.White.copy(alpha = 0.8f), fontSize = 12.sp, maxLines = 1,
+            modifier = Modifier.padding(horizontal = 14.dp))
     }
 }
 

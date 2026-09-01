@@ -13,6 +13,7 @@ sealed class TrixBlock {
     data class Quote(val children: List<TrixBlock>) : TrixBlock()
     data class ListBlock(val itemsHtml: List<String>, val ordered: Boolean) : TrixBlock()
     data class Image(val url: String) : TrixBlock()
+    data class Video(val url: String) : TrixBlock()
     data class YouTube(val id: String) : TrixBlock()
     data class Table(val rowsHtml: List<List<String>>) : TrixBlock()
     data object Rule : TrixBlock()
@@ -29,9 +30,11 @@ object TrixParser {
             when (tag) {
                 "p" -> {
                     val img = firstImageURL(inner)
+                    val vid = firstVideoURL(inner, attrs)
                     val yt = youtubeID(inner, attrs)
                     when {
                         img != null -> blocks.add(TrixBlock.Image(img))
+                        vid != null -> blocks.add(TrixBlock.Video(vid))
                         yt != null -> blocks.add(TrixBlock.YouTube(yt))
                         else -> if (hasText(inner)) blocks.add(TrixBlock.Paragraph(inner))
                     }
@@ -44,10 +47,12 @@ object TrixParser {
                 "blockquote" -> blocks.add(TrixBlock.Quote(parse(inner)))
                 "figure", "div" -> {
                     val img = firstImageURL(inner)
+                    val vid = firstVideoURL(inner, attrs)
                     val yt = youtubeID(inner, attrs)
                     when {
                         inner.contains("<hr", ignoreCase = true) -> blocks.add(TrixBlock.Rule)
                         img != null -> blocks.add(TrixBlock.Image(img))
+                        vid != null -> blocks.add(TrixBlock.Video(vid))
                         yt != null -> blocks.add(TrixBlock.YouTube(yt))
                         else -> if (hasText(inner)) blocks.add(TrixBlock.Paragraph(inner))
                     }
@@ -86,6 +91,20 @@ object TrixParser {
     private val imgSrcRe = Regex("<img[^>]+src=\"([^\"]+)\"", RegexOption.IGNORE_CASE)
     private fun firstImageURL(html: String): String? =
         imgSrcRe.find(html)?.groupValues?.get(1)?.let { AppConfig.absUrl(it) }
+
+    // A video attachment, in either shape dcamp emits: a native Trix upload
+    // (<figure data-trix-content-type="video/…"><a href="…/attachments/u…/clip.mov">)
+    // or a Basecamp-imported one (<a class="dc-file" href="…/clip.mp4" download>).
+    // Videos already offloaded to YouTube arrive as YouTube blocks (handled above).
+    private val vidExt = "mov|mp4|m4v|m2ts|mts|webm|avi|mkv|3gp|wmv|flv"
+    private val vidHrefRe = Regex("<a[^>]+href=\"([^\"]+\\.(?:$vidExt)(?:\\?[^\"]*)?)\"", RegexOption.IGNORE_CASE)
+    private val anyHrefRe = Regex("href=\"([^\"]+)\"", RegexOption.IGNORE_CASE)
+    private fun firstVideoURL(html: String, attrs: String): String? {
+        vidHrefRe.find(html)?.groupValues?.get(1)?.let { return AppConfig.absUrl(it) }
+        if ((attrs + html).contains("data-trix-content-type=\"video", ignoreCase = true))
+            anyHrefRe.find(html)?.groupValues?.get(1)?.let { return AppConfig.absUrl(it) }
+        return null
+    }
 
     private val ytRe = Regex("(?:youtube\\.com/(?:embed/|watch\\?v=)|youtu\\.be/)([A-Za-z0-9_-]{6,})", RegexOption.IGNORE_CASE)
     private fun youtubeID(html: String, attrs: String): String? {
