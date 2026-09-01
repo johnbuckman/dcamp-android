@@ -136,6 +136,8 @@ fun ComposeView(mode: ComposeMode, session: SessionStore.State, onPosted: (Int) 
         if (editHtml != null) model.loadHTML(editHtml) else model.loadDraft()
         model.focus()
     }
+    // Toolbar "Attach image" button (in the editor) → same native photo picker.
+    LaunchedEffect(model) { androidx.compose.runtime.snapshotFlow { model.attachRequested }.collect { if (it > 0) photoPicker.launch("image/*") } }
 
     fun doPost() {
         posting = true
@@ -226,11 +228,6 @@ fun ComposeView(mode: ComposeMode, session: SessionStore.State, onPosted: (Int) 
                         Text(T("Uploading image…"), fontSize = 13.sp, color = c.inkSoft)
                     }
                 }
-            }
-            Divider(color = c.line)
-            Row(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                Icon(Icons.Filled.Image, contentDescription = T("Attach image"), tint = c.inkSoft,
-                    modifier = Modifier.size(26.dp).clickable { photoPicker.launch("image/*") })
             }
         }
     }

@@ -59,8 +59,10 @@ class ComposerModel {
     var webView: WebView? = null
     var ready by mutableStateOf(false)
     var contentHeight by mutableStateOf(0)
+    var growForModal by mutableStateOf(false)   // a toolbar modal (table) is open → give it room
     var mentionQuery by mutableStateOf<String?>(null)
     var submitRequested by mutableStateOf(0)
+    var attachRequested by mutableStateOf(0)   // toolbar "Attach image" tapped → host opens the picker
     var draftKey: String? = null   // per-context draft persistence
     private var lastHtml = ""
     private var pendingQuote: String? = null   // quote requested before the editor was ready
@@ -124,6 +126,8 @@ class ComposerModel {
                     }
                 }
                 "mention" -> mentionQuery = obj["q"]?.jsonPrimitive?.contentOrNull
+                "grow" -> growForModal = (obj["on"]?.jsonPrimitive?.intOrNull ?: 0) != 0
+                "attach" -> attachRequested++
                 "submit" -> submitRequested++
                 "urltitle" -> {
                     val url = obj["url"]?.jsonPrimitive?.contentOrNull
@@ -149,8 +153,25 @@ private class ComposerBridge(val model: ComposerModel) {
 fun InlineComposer(placeholder: String, model: ComposerModel, draftKey: String? = null, onSend: suspend (String) -> Boolean) {
     val c = DcampTheme.colors
     val scope = rememberCoroutineScope()
+    val context = androidx.compose.ui.platform.LocalContext.current
     var sending by remember { mutableStateOf(false) }
-    val composerHeight = (model.contentHeight + 44).coerceIn(120, 280)
+
+    // "Attach image" (toolbar) → native photo picker → upload → insert into the editor.
+    val photoPicker = androidx.activity.compose.rememberLauncherForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.GetMultipleContents()
+    ) { uris ->
+        if (uris.isNotEmpty()) scope.launch {
+            for (uri in uris) {
+                val bytes = runCatching { context.contentResolver.openInputStream(uri)?.use { it.readBytes() } }.getOrNull() ?: continue
+                val mime = context.contentResolver.getType(uri) ?: "image/jpeg"
+                val url = runCatching { com.decentespresso.dcamp.api.Services.api.uploadImage(bytes, "image.jpg", mime) }.getOrNull()
+                if (url != null) model.insertImage(com.decentespresso.dcamp.api.AppConfig.assetBase + url)
+            }
+        }
+    }
+    // While a toolbar modal (e.g. Insert table) is open, grow the composer so the modal —
+    // a fixed overlay inside the WebView — isn't clipped by a short inline composer.
+    val composerHeight = if (model.growForModal) 360 else (model.contentHeight + 44).coerceIn(120, 280)
 
     fun send() {
         if (sending) return
@@ -171,6 +192,7 @@ fun InlineComposer(placeholder: String, model: ComposerModel, draftKey: String? 
         snapshotFlow { model.ready }.collect { r -> if (r) { model.setPlaceholder(placeholder); model.loadDraft(); model.drainPendingQuote() } }
     }
     LaunchedEffect(model) { snapshotFlow { model.submitRequested }.collect { if (it > 0) send() } }
+    LaunchedEffect(model) { snapshotFlow { model.attachRequested }.collect { if (it > 0) photoPicker.launch("image/*") } }
 
     Column(Modifier.fillMaxWidth().background(c.bg).padding(horizontal = 12.dp, vertical = 10.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp)) {
