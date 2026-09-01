@@ -83,6 +83,7 @@ class ComposerModel {
     fun focus() = eval("dcampFocus()")
     fun insertMention(id: Int, name: String) { eval("dcampInsertMention($id, ${jsStr(name)})"); mentionQuery = null }
     fun insertImage(url: String) = eval("dcampInsertImage(${jsStr(url)})")
+    fun insertFile(url: String, name: String, mime: String) = eval("dcampInsertFile(${jsStr(url)}, ${jsStr(name)}, ${jsStr(mime)})")
     /** Insert a blockquote. If the editor isn't composed/ready yet (its lazy item is
      *  off-screen), buffer it and apply once the editor reports ready. */
     fun insertQuote(html: String) {
@@ -144,6 +145,14 @@ private class ComposerBridge(val model: ComposerModel) {
     @JavascriptInterface fun post(json: String) { model.onBridge(json) }
 }
 
+/** The picked file's display name (for the upload filename + attachment label). */
+internal fun uriDisplayName(context: android.content.Context, uri: android.net.Uri): String? =
+    runCatching {
+        context.contentResolver.query(uri, arrayOf(android.provider.OpenableColumns.DISPLAY_NAME), null, null, null)?.use { c ->
+            if (c.moveToFirst()) c.getString(0) else null
+        }
+    }.getOrNull()
+
 /**
  * Inline rich-text composer (embedded Trix + Send), matching the web/iOS chat/DM/thread
  * composers. [onSend] receives the HTML and returns whether it succeeded (text is kept on
@@ -156,16 +165,25 @@ fun InlineComposer(placeholder: String, model: ComposerModel, draftKey: String? 
     val context = androidx.compose.ui.platform.LocalContext.current
     var sending by remember { mutableStateOf(false) }
 
-    // "Attach image" (toolbar) → native photo picker → upload → insert into the editor.
-    val photoPicker = androidx.activity.compose.rememberLauncherForActivityResult(
+    // "Attach" (toolbar) → native file picker (any type) → upload → insert: images inline,
+    // other files as a download link.
+    val filePicker = androidx.activity.compose.rememberLauncherForActivityResult(
         androidx.activity.result.contract.ActivityResultContracts.GetMultipleContents()
     ) { uris ->
         if (uris.isNotEmpty()) scope.launch {
             for (uri in uris) {
                 val bytes = runCatching { context.contentResolver.openInputStream(uri)?.use { it.readBytes() } }.getOrNull() ?: continue
-                val mime = context.contentResolver.getType(uri) ?: "image/jpeg"
-                val url = runCatching { com.decentespresso.dcamp.api.Services.api.uploadImage(bytes, "image.jpg", mime) }.getOrNull()
-                if (url != null) model.insertImage(com.decentespresso.dcamp.api.AppConfig.assetBase + url)
+                val mime = context.contentResolver.getType(uri) ?: "application/octet-stream"
+                val name = uriDisplayName(context, uri) ?: "file"
+                val result = runCatching { com.decentespresso.dcamp.api.Services.api.uploadImage(bytes, name, mime) }
+                val url = result.getOrNull()
+                if (url == null) {
+                    val msg = (result.exceptionOrNull() as? com.decentespresso.dcamp.api.ApiException)?.messageText ?: "Upload failed"
+                    android.widget.Toast.makeText(context, msg, android.widget.Toast.LENGTH_LONG).show()
+                    continue
+                }
+                val full = com.decentespresso.dcamp.api.AppConfig.assetBase + url
+                if (mime.startsWith("image/")) model.insertImage(full) else model.insertFile(full, name, mime)
             }
         }
     }
@@ -192,7 +210,7 @@ fun InlineComposer(placeholder: String, model: ComposerModel, draftKey: String? 
         snapshotFlow { model.ready }.collect { r -> if (r) { model.setPlaceholder(placeholder); model.loadDraft(); model.drainPendingQuote() } }
     }
     LaunchedEffect(model) { snapshotFlow { model.submitRequested }.collect { if (it > 0) send() } }
-    LaunchedEffect(model) { snapshotFlow { model.attachRequested }.collect { if (it > 0) photoPicker.launch("image/*") } }
+    LaunchedEffect(model) { snapshotFlow { model.attachRequested }.collect { if (it > 0) filePicker.launch("*/*") } }
 
     Column(Modifier.fillMaxWidth().background(c.bg).padding(horizontal = 12.dp, vertical = 10.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp)) {

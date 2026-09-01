@@ -317,7 +317,7 @@
       // — attach image (host handles it: posts "attach" → native photo picker → upload → dcampInsertImage) —
       var att = document.createElement("button");
       att.type = "button"; att.className = "trix-button dc-attach-btn";
-      att.title = "Attach image"; att.tabIndex = -1; att.innerHTML = ATTACH_SVG;
+      att.title = "Attach file"; att.tabIndex = -1; att.innerHTML = ATTACH_SVG;
       att.addEventListener("mousedown", function (e) { e.preventDefault(); post({ type: "attach" }); });
       blk.appendChild(att);
     }
@@ -464,13 +464,24 @@
     } finally { mdBusy = false; }
   };
 
-  // Called by Swift after it uploads an image via the native API.
+  // Called by the host after it uploads an image via the native API.
   window.dcampInsertImage = function (url) {
     var attachment = new Trix.Attachment({
       url: url, href: url, contentType: "image",
       content: '<img src="' + url + '">'
     });
     editorEl.editor.insertAttachment(attachment);
+    editorEl.focus();
+  };
+
+  // Called by the host after it uploads a NON-image file — insert a download link (the
+  // "dc-file" convention the read view + web recognise; video files render as inline players).
+  window.dcampInsertFile = function (url, name, mime) {
+    var label = name || "file";
+    var content = '<a class="dc-file" href="' + url + '" download>' + esc(label) + '</a>';
+    var attachment = new Trix.Attachment({ url: url, href: url, filename: label, contentType: mime || "", content: content });
+    editorEl.editor.insertAttachment(attachment);
+    editorEl.editor.insertLineBreak();
     editorEl.focus();
   };
 

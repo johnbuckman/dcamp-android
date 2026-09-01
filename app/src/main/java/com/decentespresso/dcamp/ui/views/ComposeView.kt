@@ -117,9 +117,17 @@ fun ComposeView(mode: ComposeMode, session: SessionStore.State, onPosted: (Int) 
             scope.launch {
                 for (uri in uris) {
                     val bytes = runCatching { context.contentResolver.openInputStream(uri)?.use { it.readBytes() } }.getOrNull() ?: continue
-                    val mime = context.contentResolver.getType(uri) ?: "image/jpeg"
-                    val url = runCatching { Services.api.uploadImage(bytes, "image.jpg", mime) }.getOrNull()
-                    if (url != null) model.insertImage(AppConfig.assetBase + url)
+                    val mime = context.contentResolver.getType(uri) ?: "application/octet-stream"
+                    val name = uriDisplayName(context, uri) ?: "file"
+                    val result = runCatching { Services.api.uploadImage(bytes, name, mime) }
+                    val url = result.getOrNull()
+                    if (url == null) {
+                        val msg = (result.exceptionOrNull() as? com.decentespresso.dcamp.api.ApiException)?.messageText ?: "Upload failed"
+                        android.widget.Toast.makeText(context, msg, android.widget.Toast.LENGTH_LONG).show()
+                        continue
+                    }
+                    val full = AppConfig.assetBase + url
+                    if (mime.startsWith("image/")) model.insertImage(full) else model.insertFile(full, name, mime)
                 }
                 uploading = false
             }
@@ -137,7 +145,7 @@ fun ComposeView(mode: ComposeMode, session: SessionStore.State, onPosted: (Int) 
         model.focus()
     }
     // Toolbar "Attach image" button (in the editor) → same native photo picker.
-    LaunchedEffect(model) { androidx.compose.runtime.snapshotFlow { model.attachRequested }.collect { if (it > 0) photoPicker.launch("image/*") } }
+    LaunchedEffect(model) { androidx.compose.runtime.snapshotFlow { model.attachRequested }.collect { if (it > 0) photoPicker.launch("*/*") } }
 
     fun doPost() {
         posting = true
