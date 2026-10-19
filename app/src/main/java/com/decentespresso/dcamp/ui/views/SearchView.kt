@@ -80,9 +80,10 @@ fun SearchView() {
     var derekLoading by remember { mutableStateOf(false) }
 
     var sortNewest by remember { mutableStateOf(false) }
-    var goodOnly by remember { mutableStateOf(false) }
+    var showWeak by remember { mutableStateOf(false) }        // weak-relevance tail expanded ("Show N more results…")
     var selectedForum by remember { mutableStateOf<Int?>(null) }
-    var expertsOnly by remember { mutableStateOf(true) }
+    var expertsOnly by remember { mutableStateOf(false) }     // all members by default; experts is opt-in
+    var showAllPeople by remember { mutableStateOf(false) }   // People capped at PEOPLE_CAP rows so results stay in view
     var sortMenu by remember { mutableStateOf(false) }
 
     val terms = remember(query) { query.lowercase().split(" ").filter { it.length >= 2 } }
@@ -95,7 +96,7 @@ fun SearchView() {
         searching = true
         val t = if (types.isEmpty()) "messages,comments,chat,pings" else types.joinToString(",")
         response = runCatching { Services.api.search(query, t, 0) }.getOrDefault(SearchResponse())
-        selectedForum = null
+        selectedForum = null; showWeak = false; showAllPeople = false
         searching = false
     }
 
@@ -151,7 +152,7 @@ fun SearchView() {
             }
         }
 
-        // Sort / best-matches / experts-only controls
+        // Sort / experts-only controls
         Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 6.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Box {
@@ -161,7 +162,6 @@ fun SearchView() {
                     androidx.compose.material3.DropdownMenuItem(text = { Text(T("Newest")) }, onClick = { sortNewest = true; sortMenu = false })
                 }
             }
-            FilterPill(T("Best matches"), active = goodOnly) { goodOnly = !goodOnly }
             if (response.people.isNotEmpty() && !response.experts.isNullOrEmpty()) {
                 FilterPill(T("Experts only"), active = expertsOnly) { expertsOnly = !expertsOnly }
             }
@@ -170,8 +170,8 @@ fun SearchView() {
         response.forums?.takeIf { it.size > 1 }?.let { forums ->
             Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 2.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                FilterPill(T("All forums"), active = selectedForum == null) { selectedForum = null }
-                forums.forEach { f -> FilterPill(f.name, active = selectedForum == f.id) { selectedForum = if (selectedForum == f.id) null else f.id } }
+                FilterPill(T("All forums"), active = selectedForum == null) { selectedForum = null; showWeak = false }
+                forums.forEach { f -> FilterPill(f.name, active = selectedForum == f.id) { selectedForum = if (selectedForum == f.id) null else f.id; showWeak = false } }
             }
         }
 
@@ -206,22 +206,30 @@ fun SearchView() {
             }
             if (people.isNotEmpty()) {
                 item { SectionHeader("${T("People")} (${people.size})") }
-                items(people, key = { "p-${it.id}" }) { p ->
+                items(if (showAllPeople) people else people.take(PEOPLE_CAP), key = { "p-${it.id}" }) { p ->
                     PersonResultRow(p, isExpert = response.experts?.contains(p.id) == true) { router.personID = p.id }
                     Divider(color = c.line)
                 }
+                if (!showAllPeople && people.size > PEOPLE_CAP) {
+                    item { MoreRow(T("Show all {n} people", "n" to "${people.size}")) { showAllPeople = true } }
+                }
             }
+            // Good matches first (score >= half the top); the weak tail waits behind "Show N more results…".
+            val forumResults = selectedForum?.let { f -> response.results.filter { it.forumId == f } } ?: response.results
             val results = run {
-                var list = response.results
-                selectedForum?.let { f -> list = list.filter { it.forumId == f } }
-                if (goodOnly) { val top = list.mapNotNull { it.score }.maxOrNull() ?: 0.0; if (top > 0) list = list.filter { (it.score ?: 0.0) >= top * 0.5 } }
+                var list = forumResults
+                if (!showWeak) { val top = list.mapNotNull { it.score }.maxOrNull() ?: 0.0; if (top > 0) list = list.filter { (it.score ?: 0.0) >= top * 0.5 } }
                 if (sortNewest) list.sortedByDescending { it.createdAt ?: 0 } else list.sortedByDescending { it.score ?: 0.0 }
             }
+            val weak = forumResults.size - results.size
             if (results.isNotEmpty()) {
                 item { SectionHeader("${T("Results")} (${results.size})") }
                 items(results, key = { it.uid }) { hit ->
                     SearchHitRow(hit, terms) { open(hit) }
                     Divider(color = c.line)
+                }
+                if (weak > 0) {
+                    item { MoreRow(if (weak == 1) T("Show 1 more result…") else T("Show {n} more results…", "n" to "$weak")) { showWeak = true } }
                 }
             }
             if (query.length >= 2 && !searching && results.isEmpty() && people.isEmpty()) {
@@ -233,6 +241,14 @@ fun SearchView() {
             }
         }
     }
+}
+
+private const val PEOPLE_CAP = 5
+
+@Composable
+private fun MoreRow(text: String, onClick: () -> Unit) {
+    Text(text, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = DcampTheme.colors.accentInk,
+        modifier = Modifier.fillMaxWidth().clickable { onClick() }.padding(vertical = 12.dp))
 }
 
 @Composable
