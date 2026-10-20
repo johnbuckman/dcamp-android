@@ -67,7 +67,7 @@ fun LoginView(session: SessionStore, state: SessionStore.State) {
                 color = c.inkSoft, textAlign = TextAlign.Center)
 
             state.errorMessage?.let {
-                Text(it, fontSize = 13.sp, color = androidx.compose.ui.graphics.Color(0xFFDC2626),
+                Text(it, fontSize = 13.sp, color = c.danger,
                     textAlign = TextAlign.Center)
             }
 

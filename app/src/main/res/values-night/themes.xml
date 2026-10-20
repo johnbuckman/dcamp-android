@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Dark window shell for system dark mode (no white flash at launch / behind the keyboard).
+         MainActivity re-applies bars + window background from the in-app ThemeMode at runtime. -->
+    <style name="Theme.Dcamp" parent="android:Theme.Material.NoActionBar">
+        <item name="android:windowBackground">@color/window_background</item>
+        <item name="android:statusBarColor">@color/window_background</item>
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="android:navigationBarColor">@color/window_background</item>
+    </style>
+</resources>

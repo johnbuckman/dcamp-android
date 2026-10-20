@@ -1,6 +1,7 @@
 package com.decentespresso.dcamp.ui.trix
 
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.LinkAnnotation
 import androidx.compose.ui.text.SpanStyle
@@ -25,7 +26,12 @@ object TrixInline {
 
     private data class Colors(val fg: Color?, val bg: Color?)
 
-    fun parse(html: String, colors: DcampColors, onLink: (String) -> Unit): AnnotatedString = buildAnnotatedString {
+    /**
+     * @param ink the run's default text colour (what un-coloured text renders in).
+     * @param surface the solid background the text sits on (card/panel, or the "mine" bubble).
+     */
+    fun parse(html: String, colors: DcampColors, onLink: (String) -> Unit,
+              ink: Color = colors.ink, surface: Color = colors.panel): AnnotatedString = buildAnnotatedString {
         var bold = false; var italic = false; var code = false; var under = false
         val hrefStack = ArrayDeque<String>()
         val colorStack = ArrayDeque<Colors>()
@@ -41,6 +47,11 @@ object TrixInline {
                 fg = if (isMention) colors.accentInk else colors.link
                 if (isMention) weight = FontWeight.Bold else deco = TextDecoration.Underline
             }
+            // Legibility guard (port of dcamp.js fixInlineColors): an author colour picked in one
+            // theme can vanish in the other (navy on the dark card, yellow on paper), and a
+            // highlight with no text colour leaves the theme ink on it (light ink on yellow in
+            // dark mode). Measure against the REAL background and fall back when too low.
+            if (fg != null || bg != null) fg = legibleFg(fg, bg, ink, surface)
             return SpanStyle(
                 color = fg ?: Color.Unspecified,
                 background = bg ?: Color.Unspecified,
@@ -109,6 +120,27 @@ object TrixInline {
             return re.find(style)?.groupValues?.get(1)?.trim()?.let { cssColor(it) }
         }
         return Colors(fg = value("color"), bg = value("background-color") ?: value("background"))
+    }
+
+    private const val MIN_CONTRAST = 4.5   // WCAG AA, same as the web guard
+
+    private fun relLum(c: Color): Double {
+        fun ch(v: Float): Double = if (v <= 0.03928f) v / 12.92 else Math.pow((v + 0.055) / 1.055, 2.4)
+        return 0.2126 * ch(c.red) + 0.7152 * ch(c.green) + 0.0722 * ch(c.blue)
+    }
+
+    internal fun contrast(a: Color, b: Color): Double {
+        val l1 = relLum(a); val l2 = relLum(b)
+        return (maxOf(l1, l2) + 0.05) / (minOf(l1, l2) + 0.05)
+    }
+
+    /** The text colour to use for a run with author [fg] and/or highlight [bg]; null = inherit [ink]. */
+    internal fun legibleFg(fg: Color?, bg: Color?, ink: Color, surface: Color): Color? {
+        val back = bg?.let { if (it.alpha < 1f) it.compositeOver(surface) else it } ?: surface
+        if (fg != null && contrast(fg.compositeOver(back), back) >= MIN_CONTRAST) return fg
+        if (contrast(ink, back) >= MIN_CONTRAST) return null
+        val light = Color(0xFFF5F5F5); val dark = Color(0xFF111111)
+        return if (contrast(light, back) >= contrast(dark, back)) light else dark
     }
 
     private val named = mapOf(

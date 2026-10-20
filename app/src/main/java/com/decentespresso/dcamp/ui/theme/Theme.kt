@@ -71,7 +71,10 @@ fun DcampTheme(
             background = dc.bg, onBackground = dc.ink,
             surface = dc.panel, onSurface = dc.ink,
             surfaceVariant = dc.panel, onSurfaceVariant = dc.inkSoft,
-            outline = dc.lineStrong, error = androidx.compose.ui.graphics.Color(0xFFE5484D),
+            outline = dc.lineStrong, outlineVariant = dc.line, error = dc.danger,
+            // menus, dialogs and switch tracks: the palette, not M3's baseline lavender/purple greys
+            surfaceContainerLowest = dc.panel, surfaceContainerLow = dc.panel, surfaceContainer = dc.panel,
+            surfaceContainerHigh = dc.panel, surfaceContainerHighest = dc.bubbleOther,
         )
     } else {
         lightColorScheme(
@@ -79,11 +82,17 @@ fun DcampTheme(
             background = dc.bg, onBackground = dc.ink,
             surface = dc.panel, onSurface = dc.ink,
             surfaceVariant = dc.panel, onSurfaceVariant = dc.inkSoft,
-            outline = dc.lineStrong, error = androidx.compose.ui.graphics.Color(0xFFDC2626),
+            outline = dc.lineStrong, outlineVariant = dc.line, error = dc.danger,
+            // menus, dialogs and switch tracks: the palette, not M3's baseline lavender/purple greys
+            surfaceContainerLowest = dc.panel, surfaceContainerLow = dc.panel, surfaceContainer = dc.panel,
+            surfaceContainerHigh = dc.panel, surfaceContainerHighest = dc.bubbleOther,
         )
     }
 
-    CompositionLocalProvider(LocalDcampColors provides dc) {
+    // Text()/Icon() with no explicit colour read LocalContentColor, which is BLACK outside a
+    // Material Surface (we draw backgrounds with Modifier.background) — invisible on dark.
+    CompositionLocalProvider(LocalDcampColors provides dc,
+        androidx.compose.material3.LocalContentColor provides dc.ink) {
         MaterialTheme(colorScheme = m3, typography = DcampTypography, content = content)
     }
 }

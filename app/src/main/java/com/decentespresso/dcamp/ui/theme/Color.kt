@@ -3,6 +3,7 @@ package com.decentespresso.dcamp.ui.theme
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.toArgb
 
 /**
  * Design tokens mirrored from dcamp's dcamp.css (:root light "paper" vs
@@ -22,6 +23,14 @@ data class DcampColors(
     val link: Color,
     val decentBg: Color,
     val bubbleOther: Color,
+    /** Sender's own DM/chat bubble (white text on it must hold ≥4.5:1). */
+    val bubbleMine: Color,
+    /** Destructive / error TEXT (sign out, login errors); count badges keep their solid red. */
+    val danger: Color,
+    /** DM purple used as a text tint (search type pill). */
+    val dm: Color,
+    /** True for the dark palette (WebViews and system bars need the bare flag). */
+    val dark: Boolean = false,
 )
 
 val DcampLightColors = DcampColors(
@@ -37,6 +46,9 @@ val DcampLightColors = DcampColors(
     link        = Color(0xFF1F6FD6),
     decentBg    = Color(0xFF1C1C1C),
     bubbleOther = Color(0xFFF0EDE5),
+    bubbleMine  = Color(0xFF1F6FD6),   // = link; white 4.9:1
+    danger      = Color(0xFFDC2626),
+    dm          = Color(0xFF7A48CC),
 )
 
 val DcampDarkColors = DcampColors(
@@ -52,6 +64,13 @@ val DcampDarkColors = DcampColors(
     link        = Color(0xFF66A3EC),
     decentBg    = Color(0xFF4D473C),
     bubbleOther = Color(0xFF373228),
+    bubbleMine  = Color(0xFF2F6CBF),   // NOT link (#66A3EC): white on it was 2.6:1
+    danger      = Color(0xFFF06A6E),
+    dm          = Color(0xFFB194EE),
+    dark        = true,
 )
 
 val LocalDcampColors = staticCompositionLocalOf { DcampLightColors }
+
+/** "RRGGBB" (no alpha) for passing a token to a WebView. */
+fun Color.hex6(): String = "%06X".format(toArgb() and 0xFFFFFF)

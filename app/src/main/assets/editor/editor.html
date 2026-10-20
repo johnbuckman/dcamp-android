@@ -2,8 +2,39 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
 <link rel="stylesheet" href="trix.css">
 <script src="trix.js"></script>
+<script>
+  (function () {   // host palette from ?theme=dark&ink=RRGGBB&… (applied before first paint)
+    var q = new URLSearchParams(location.search), r = document.documentElement;
+    if (q.get("theme") === "dark") r.setAttribute("data-theme", "dark");
+    ["ink", "soft", "panel", "line", "link", "accent"].forEach(function (k) {
+      var v = q.get(k); if (v && /^[0-9a-f]{6}$/i.test(v)) r.style.setProperty("--dc-" + k, "#" + v);
+    });
+  })();
+</script>
 <style>
-  :root { color-scheme: light dark; }
+  /* Theme comes from the HOST, not prefers-color-scheme: the Android window theme is light,
+     so the WebView always reports light even when Compose draws dark (→ black text on the
+     dark panel). The host passes its palette in the URL query and via dcampSetTheme(). */
+  :root { color-scheme: light; --dc-ink: #1c1c1c; --dc-soft: #6b6b6b; --dc-panel: #ffffff;
+    --dc-line: #ddd5c7; --dc-link: #1f6fd6; --dc-accent: #16a34a; }
+  :root[data-theme=dark] { color-scheme: dark; }
+  html, body, trix-editor { color: var(--dc-ink); }
+  trix-editor a, .trix-content a { color: var(--dc-link); }
+  trix-editor ::selection { background: color-mix(in srgb, var(--dc-link) 35%, transparent); }
+  /* trix.css is light-only: re-point its fixed colours at the palette */
+  trix-toolbar .trix-button { color: var(--dc-ink); border-color: var(--dc-line) !important; }
+  trix-toolbar .trix-button.trix-active { background: color-mix(in srgb, var(--dc-link) 28%, var(--dc-panel)); color: var(--dc-ink); }
+  trix-toolbar .trix-button--icon:not(:disabled)::before { opacity: .7; }
+  trix-toolbar .trix-button--icon.trix-active::before { opacity: 1; }
+  :root[data-theme=dark] trix-toolbar .trix-button--icon::before { filter: invert(1); }
+  trix-toolbar .trix-button-group { border-color: var(--dc-line); }
+  trix-toolbar .trix-dialog { background: var(--dc-panel); color: var(--dc-ink);
+    border-top-color: var(--dc-line); box-shadow: 0 0.3em 1em rgba(0,0,0,.35); }
+  trix-toolbar .trix-input--dialog { background-color: var(--dc-panel); color: var(--dc-ink); border-color: var(--dc-line); }
+  .trix-content blockquote { border-color: var(--dc-line); }
+  .trix-content pre { background-color: color-mix(in srgb, var(--dc-ink) 8%, var(--dc-panel)); color: var(--dc-ink); }
+  .trix-content .attachment--preview .attachment__caption, .trix-content .attachment--file { color: var(--dc-soft); border-color: var(--dc-line); }
+  trix-editor .trix-button--remove { background-color: var(--dc-panel); }
   html, body { margin: 0; padding: 0; height: 100%;
     font: -apple-system-body; background: transparent;
     -webkit-text-size-adjust: 100%; }
@@ -13,8 +44,8 @@
      Android's system text-selection menu — which pops above the selection — lands in the
      empty content area, not over the toolbar buttons. */
   trix-toolbar { position: sticky; bottom: 0; z-index: 2; order: 2;
-    background: canvas; padding: 4px 6px;
-    border-top: 1px solid color-mix(in srgb, canvasText 15%, transparent); }
+    background: var(--dc-panel); padding: 4px 6px;
+    border-top: 1px solid color-mix(in srgb, var(--dc-ink) 15%, transparent); }
   /* drop Trix's built-in file button — the app provides its own "Attach image" button that
      posts to the host (native photo picker). NOTE the hyphens: Trix's real class names. */
   trix-toolbar .trix-button-group--file-tools,
@@ -23,26 +54,26 @@
      never runs under the toolbar. */
   trix-editor { border: none; min-height: 44px; padding: 12px 14px; overflow-y: auto;
     font: -apple-system-body; outline: none; order: 1; flex: 1 1 auto; }
-  trix-editor:empty:not(:focus)::before { color: color-mix(in srgb, canvasText 40%, transparent); }
+  trix-editor:empty:not(:focus)::before { color: color-mix(in srgb, var(--dc-ink) 40%, transparent); }
   /* our injected toolbar buttons (HR + colour) match Trix's built-in buttons */
   .trix-hr-btn, .dc-color-btn { font-size: 15px; line-height: 1; }
   /* colour + highlight swatch popover, anchored just under the sticky toolbar */
   .dc-color-pop { position: absolute; left: 4px; z-index: 10; display: none;
-    background: canvas; color: canvasText; border-radius: 10px; padding: 7px 9px;
-    border: 1px solid color-mix(in srgb, canvasText 20%, transparent);
+    background: var(--dc-panel); color: var(--dc-ink); border-radius: 10px; padding: 7px 9px;
+    border: 1px solid color-mix(in srgb, var(--dc-ink) 20%, transparent);
     box-shadow: 0 6px 20px rgba(0,0,0,.18); }
   .dc-color-pop.open { display: block; }
   .dc-color-pop .dc-row { display: flex; align-items: center; gap: 7px; margin: 3px 0; }
   .dc-color-pop .dc-cue { width: 15px; text-align: center; font: 600 12px -apple-system; opacity: .55; }
   .dc-sw { width: 20px; height: 20px; border-radius: 50%; cursor: pointer; padding: 0;
-    border: 1px solid color-mix(in srgb, canvasText 25%, transparent); }
+    border: 1px solid color-mix(in srgb, var(--dc-ink) 25%, transparent); }
   .dc-color-pop .dc-clear { margin-left: 4px; font: 12px -apple-system; background: none;
     border: 0; color: inherit; text-decoration: underline; cursor: pointer; padding: 2px 4px; }
   .dc-color-btn svg, .trix-table-btn svg { vertical-align: middle; }
   /* table-insert modal */
   .dc-modal-back { position: fixed; inset: 0; z-index: 50; background: rgba(0,0,0,.28);
     display: flex; align-items: center; justify-content: center; padding: 8px; }
-  .dc-modal { background: canvas; color: canvasText; border-radius: 14px; padding: 16px;
+  .dc-modal { background: var(--dc-panel); color: var(--dc-ink); border-radius: 14px; padding: 16px;
     width: min(92vw, 460px); box-shadow: 0 12px 40px rgba(0,0,0,.3);
     display: flex; flex-direction: column; max-height: 100%; }
   .dc-modal-title { font: 700 16px -apple-system; margin-bottom: 12px; }
@@ -50,15 +81,15 @@
     font: 13px -apple-system; margin-bottom: 12px; }
   .dc-stepper b { display: inline-block; min-width: 20px; text-align: center; }
   .dc-stepper button { width: 26px; height: 26px; border-radius: 6px; margin: 0 3px;
-    border: 1px solid color-mix(in srgb, canvasText 22%, transparent); background: canvas; color: inherit; font-size: 15px; cursor: pointer; }
+    border: 1px solid color-mix(in srgb, var(--dc-ink) 22%, transparent); background: var(--dc-panel); color: inherit; font-size: 15px; cursor: pointer; }
   /* Only the cell grid scrolls; title, Rows/Cols steppers and Cancel/Insert stay pinned. */
   .dc-tgrid { display: grid; gap: 5px; margin-bottom: 14px; min-height: 0; overflow-y: auto; }
   .dc-tcell { padding: 7px 8px; font: 14px -apple-system; border-radius: 6px;
-    border: 1px solid color-mix(in srgb, canvasText 20%, transparent); background: canvas; color: inherit; min-width: 0; }
+    border: 1px solid color-mix(in srgb, var(--dc-ink) 20%, transparent); background: var(--dc-panel); color: inherit; min-width: 0; }
   .dc-tcell.dc-th { font-weight: 700; }
   .dc-modal-act { display: flex; justify-content: flex-end; gap: 10px; }
   .dc-btn { padding: 8px 16px; border-radius: 8px; font: 600 14px -apple-system; cursor: pointer;
-    border: 1px solid color-mix(in srgb, canvasText 20%, transparent); background: canvas; color: inherit; }
+    border: 1px solid color-mix(in srgb, var(--dc-ink) 20%, transparent); background: var(--dc-panel); color: inherit; }
   .dc-btn-primary { background: #16a34a; border-color: #16a34a; color: #fff; }
 </style>
 <form>
@@ -95,7 +126,24 @@
     editorEl.style.minHeight = (avail > 360 ? Math.max(44, avail - 16) : 44) + "px";
   }
   window.addEventListener("resize", fitEditor);
-  editorEl.addEventListener("trix-initialize", function () { post({ type: "ready" }); buildToolbar(); addLinkDialogButtons(); fitEditor(); post({ type: "change", html: input.value, length: 0, height: contentHeight() }); });
+  // Android: pull the saved draft and load it BEFORE reporting ready (host pushes raced the init).
+  function pullDraft() {
+    try {
+      if (window.AndroidComposer && window.AndroidComposer.draft) {
+        var d = window.AndroidComposer.draft();
+        if (d) editorEl.editor.loadHTML(d);
+      }
+    } catch (e) {}
+  }
+  // Trix can finish initialising BEFORE this script runs (the element above is upgraded as soon
+  // as it's parsed), and then "trix-initialize" never reaches us: no "ready" to the host, no draft
+  // restore, no draft saving, no custom toolbar buttons. Run init once, from whichever comes first.
+  var dcInited = false;
+  function onTrixInit() {
+    if (dcInited) return; dcInited = true;
+    pullDraft(); post({ type: "ready" }); buildToolbar(); addLinkDialogButtons(); fitEditor(); post({ type: "change", html: input.value, length: 0, height: contentHeight() });
+  }
+  editorEl.addEventListener("trix-initialize", onTrixInit);   // (+ catch-up call at the end of this script)
 
   // ⌘↵ / Ctrl+↵ submits (matches the web's bindCmdEnter).
   editorEl.addEventListener("keydown", function (e) {
@@ -535,6 +583,12 @@
   };
 
   // Called by Swift to set the placeholder text.
+  // Called by the host when its appearance changes: {dark, ink, soft, panel, line, link, accent} (hex "#rrggbb").
+  window.dcampSetTheme = function (t) {
+    var r = document.documentElement;
+    if (t.dark) r.setAttribute("data-theme", "dark"); else r.removeAttribute("data-theme");
+    ["ink", "soft", "panel", "line", "link", "accent"].forEach(function (k) { if (t[k]) r.style.setProperty("--dc-" + k, t[k]); });
+  };
   window.dcampSetPlaceholder = function (t) { editorEl.setAttribute("placeholder", t); };
 
   // --- @mention autocomplete ---------------------------------------------
@@ -580,4 +634,6 @@
     post({ type: "mention", q: null });
     editorEl.focus();
   };
+  // catch-up: Trix already initialised before our listener existed (see onTrixInit)
+  if (editorEl.editor) onTrixInit();
 </script>

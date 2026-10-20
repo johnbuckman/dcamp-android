@@ -3,6 +3,7 @@ package com.decentespresso.dcamp
 import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.background
@@ -13,11 +14,13 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -52,6 +55,17 @@ class MainActivity : ComponentActivity() {
             }
 
             DcampTheme(mode = com.decentespresso.dcamp.ui.theme.ThemeState.mode) {
+                // System bars + window background follow the IN-APP theme (enableEdgeToEdge's
+                // default follows the system setting, so "Dark" on a light phone gave dark-on-dark
+                // status-bar icons, and the light window showed through behind the keyboard).
+                val c = DcampTheme.colors
+                DisposableEffect(c.dark) {
+                    val t = android.graphics.Color.TRANSPARENT
+                    val bars = if (c.dark) SystemBarStyle.dark(t) else SystemBarStyle.light(t, t)
+                    enableEdgeToEdge(statusBarStyle = bars, navigationBarStyle = bars)
+                    window.setBackgroundDrawable(android.graphics.drawable.ColorDrawable(c.bg.toArgb()))
+                    onDispose {}
+                }
                 when (state.phase) {
                     SessionStore.Phase.LAUNCHING -> LaunchScreen()
                     SessionStore.Phase.LOGGED_OUT -> LoginView(session, state)

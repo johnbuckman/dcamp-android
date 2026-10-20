@@ -302,19 +302,21 @@ private fun DMBubble(message: DMMessage, showSender: Boolean) {
 
         Column(
             Modifier.widthIn(max = 280.dp)
-                .background(if (mine) c.link else if (showSender) senderTint.copy(alpha = 0.14f) else c.bubbleOther,
+                .background(if (mine) c.bubbleMine else if (showSender) senderTint.copy(alpha = 0.14f) else c.bubbleOther,
                     RoundedCornerShape(16.dp))
                 .padding(horizontal = 12.dp, vertical = 8.dp),
             verticalArrangement = Arrangement.spacedBy(3.dp),
         ) {
             if (showSender && !mine) {
                 message.sender?.name?.takeIf { it.isNotEmpty() }?.let {
-                    Text(it, fontSize = 11.sp, fontWeight = FontWeight.Bold, color = senderTint)
+                    // avatar colours are arbitrary (navy on the dark theme): keep the tint only where it reads
+                    Text(it, fontSize = 11.sp, fontWeight = FontWeight.Bold,
+                        color = com.decentespresso.dcamp.ui.trix.TrixInline.legibleFg(senderTint, senderTint.copy(alpha = 0.14f), c.ink, c.bg) ?: c.ink)
                 }
             }
             // "mine" bubbles render white text on the blue background — links and
             // @mentions too (their own blue/green vanished on the blue bubble).
-            val bubbleColors = if (mine) c.copy(link = Color.White, accentInk = Color.White) else c
+            val bubbleColors = if (mine) c.copy(link = Color.White, accentInk = Color.White, panel = c.bubbleMine) else c.copy(panel = c.bubbleOther)
             androidx.compose.runtime.CompositionLocalProvider(com.decentespresso.dcamp.ui.theme.LocalDcampColors provides bubbleColors) {
                 TranslatableText(original = message.html, translated = message.bodyTr,
                     textColor = if (mine) Color.White else c.ink)

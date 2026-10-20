@@ -3,6 +3,8 @@ package com.decentespresso.dcamp.ui.views
 import android.annotation.SuppressLint
 import android.webkit.JavascriptInterface
 import android.webkit.WebView
+import androidx.webkit.WebSettingsCompat
+import androidx.webkit.WebViewFeature
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -40,6 +42,8 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.decentespresso.dcamp.ui.theme.DcampColors
+import com.decentespresso.dcamp.ui.theme.hex6
 import androidx.compose.ui.viewinterop.AndroidView
 import com.decentespresso.dcamp.api.Person
 import com.decentespresso.dcamp.api.PlainText
@@ -73,13 +77,31 @@ class ComposerModel {
     var mentionQuery by mutableStateOf<String?>(null)
     var submitRequested by mutableStateOf(0)
     var attachRequested by mutableStateOf(0)   // toolbar "Attach image" tapped → host opens the picker
-    var draftKey: String? = null   // per-context draft persistence
+    @Volatile var draftKey: String? = null   // per-context draft persistence (read on the JS bridge thread)
     private var lastHtml = ""
+    // False until loadDraft() has run for the current page: trix-initialize posts an EMPTY
+    // "change" right after "ready", and saving that would wipe the stored draft before it's restored.
+    @Volatile private var draftRestored = false
+    // Key the page itself pulled its draft for at trix-initialize (see pullDraft), so loadDraft()
+    // doesn't push it a second time.
+    @Volatile private var pulledKey: String? = null
+
+    /** JS bridge thread: the editor asks for its draft once Trix has initialised and loads it
+     *  itself before reporting "ready". A push via evaluateJavascript on "ready" sometimes never
+     *  landed (editor empty while the pref still held the draft). */
+    fun pullDraft(): String {
+        val k = draftKey ?: return ""
+        pulledKey = k; draftRestored = true
+        val d = com.decentespresso.dcamp.api.AppConfig.getDraft(k)
+        return if (PlainText.strip(d).isNotEmpty()) d else ""
+    }
     private var pendingQuote: String? = null   // quote requested before the editor was ready
 
     /** Restore this context's saved draft into the editor (call once ready). */
     fun loadDraft() {
+        draftRestored = true
         val k = draftKey ?: return
+        if (pulledKey == k) return      // the page already loaded it (pullDraft)
         val d = com.decentespresso.dcamp.api.AppConfig.getDraft(k)
         if (d.isNotEmpty() && PlainText.strip(d).isNotEmpty()) loadHTML(d)
     }
@@ -90,6 +112,8 @@ class ComposerModel {
     private fun jsStr(s: String) = "\"" + s.replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", "\\n") + "\""
 
     fun setPlaceholder(text: String) = eval("dcampSetPlaceholder(${jsStr(text)})")
+    fun setTheme(c: DcampColors) = eval("dcampSetTheme({dark:${c.dark},ink:'#${c.ink.hex6()}',soft:'#${c.inkSoft.hex6()}'," +
+        "panel:'#${c.panel.hex6()}',line:'#${c.lineStrong.hex6()}',link:'#${c.link.hex6()}',accent:'#${c.accent.hex6()}'})")
     fun focus() = eval("dcampFocus()")
     fun insertMention(id: Int, name: String) { eval("dcampInsertMention($id, ${jsStr(name)})"); mentionQuery = null }
     fun insertImage(url: String) = eval("dcampInsertImage(${jsStr(url)})")
@@ -103,6 +127,7 @@ class ComposerModel {
     /** Apply a quote buffered while the editor was loading — called after loadDraft so the
      *  quote appends to (rather than being clobbered by) a restored draft. */
     fun drainPendingQuote() { pendingQuote?.let { val h = it; pendingQuote = null; eval("dcampInsertQuote(${jsStr(h)})") } }
+    fun resetPage() { pulledKey = null; draftRestored = false }
     fun loadHTML(html: String) { eval("dcampLoadHTML(${jsStr(html)})"); lastHtml = html }
     fun clear() { eval("dcampClear()"); lastHtml = "" }
 
@@ -127,11 +152,11 @@ class ComposerModel {
         val type = obj["type"]?.jsonPrimitive?.contentOrNull
         webView?.post {
             when (type) {
-                "ready" -> ready = true
+                "ready" -> { if (pulledKey == null) draftRestored = false; ready = true }
                 "change" -> {
                     lastHtml = obj["html"]?.jsonPrimitive?.contentOrNull ?: ""
                     obj["height"]?.jsonPrimitive?.intOrNull?.let { if (it > 0) contentHeight = it }
-                    draftKey?.let { k ->
+                    if (draftRestored) draftKey?.let { k ->
                         if (PlainText.strip(lastHtml).isEmpty()) com.decentespresso.dcamp.api.AppConfig.clearDraft(k)
                         else com.decentespresso.dcamp.api.AppConfig.setDraft(k, lastHtml)
                     }
@@ -153,6 +178,7 @@ class ComposerModel {
 
 private class ComposerBridge(val model: ComposerModel) {
     @JavascriptInterface fun post(json: String) { model.onBridge(json) }
+    @JavascriptInterface fun draft(): String = model.pullDraft()
 }
 
 /** The picked file's display name (for the upload filename + attachment label). */
@@ -261,6 +287,10 @@ fun InlineComposer(placeholder: String, model: ComposerModel, draftKey: String? 
 @SuppressLint("SetJavaScriptEnabled")
 @Composable
 internal fun ComposerWebView(model: ComposerModel, modifier: Modifier = Modifier) {
+    // The page can't detect our theme itself (the window theme is light, so the WebView reports
+    // light even while Compose draws dark): hand it the palette on load and on every change.
+    val c = DcampTheme.colors
+    LaunchedEffect(model, c) { snapshotFlow { model.ready }.collect { if (it) model.setTheme(c) } }
     AndroidView(
         modifier = modifier,
         factory = { ctx ->
@@ -273,11 +303,16 @@ internal fun ComposerWebView(model: ComposerModel, modifier: Modifier = Modifier
                 settings.javaScriptEnabled = true
                 settings.domStorageEnabled = true
                 setBackgroundColor(android.graphics.Color.TRANSPARENT)
+                if (WebViewFeature.isFeatureSupported(WebViewFeature.ALGORITHMIC_DARKENING))
+                    WebSettingsCompat.setAlgorithmicDarkeningAllowed(settings, false)
                 addJavascriptInterface(ComposerBridge(model), "AndroidComposer")
                 setOnFocusChangeListener { _, hasFocus -> model.focused = hasFocus }
                 model.ready = false            // fresh page: JS bridge not loaded yet
+                model.resetPage()
                 model.webView = this
-                loadUrl("file:///android_asset/editor/editor.html")
+                loadUrl("file:///android_asset/editor/editor.html?theme=${if (c.dark) "dark" else "light"}" +
+                    "&ink=${c.ink.hex6()}&soft=${c.inkSoft.hex6()}&panel=${c.panel.hex6()}" +
+                    "&line=${c.lineStrong.hex6()}&link=${c.link.hex6()}&accent=${c.accent.hex6()}")
             }
         },
         // When this lazy item scrolls off-screen it's disposed; drop the stale WebView so a

@@ -302,7 +302,7 @@ private fun TypePill(type: String?) {
     val (label, tint) = when (type) {
         "comment" -> T("COMMENT") to c.link
         "chat" -> T("CHAT") to c.accent
-        "pings", "dm" -> T("DM") to Color(0xFF8C5CDB)
+        "pings", "dm" -> T("DM") to c.dm
         else -> T("THREAD") to c.inkSoft
     }
     Text(label, fontSize = 10.sp, fontWeight = FontWeight.Bold, color = tint,

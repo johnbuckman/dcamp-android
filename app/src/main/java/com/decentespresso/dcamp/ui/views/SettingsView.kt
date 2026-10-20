@@ -229,7 +229,7 @@ fun SettingsView(session: SessionStore, state: SessionStore.State) {
             Text(T("Server"), color = c.muted, fontSize = 12.sp)
             Text(AppConfig.serverLabel, color = c.inkSoft, fontSize = 13.sp)
             Spacer(Modifier.size(4.dp))
-            Text(T("Sign out"), color = Color(0xFFDC2626), fontSize = 15.sp, fontWeight = FontWeight.SemiBold,
+            Text(T("Sign out"), color = c.danger, fontSize = 15.sp, fontWeight = FontWeight.SemiBold,
                 modifier = Modifier.clickable { scope.launch { session.logout() } })
         }
         Spacer(Modifier.size(20.dp))

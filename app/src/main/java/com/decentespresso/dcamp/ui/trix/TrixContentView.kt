@@ -118,11 +118,11 @@ private fun TrixBlockView(block: TrixBlock, onLink: (String) -> Unit, textColor:
     val ink = textColor ?: c.ink
     when (block) {
         is TrixBlock.Paragraph ->
-            Text(TrixInline.parse(block.html, c, onLink), color = ink, fontSize = 15.sp, lineHeight = 22.sp)
+            Text(TrixInline.parse(block.html, c, onLink, ink, c.panel), color = ink, fontSize = 15.sp, lineHeight = 22.sp)
 
         is TrixBlock.Heading -> {
             val size = when (block.level) { 1 -> 26.sp; 2 -> 22.sp; else -> 19.sp }
-            Text(TrixInline.parse(block.html, c, onLink), color = ink, fontSize = size, fontWeight = FontWeight.Bold)
+            Text(TrixInline.parse(block.html, c, onLink, ink, c.panel), color = ink, fontSize = size, fontWeight = FontWeight.Bold)
         }
 
         is TrixBlock.Quote ->
@@ -139,7 +139,7 @@ private fun TrixBlockView(block: TrixBlock, onLink: (String) -> Unit, textColor:
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         Text(if (block.ordered) "${idx + 1}." else "•", color = c.muted, fontSize = 15.sp,
                             modifier = Modifier.width(20.dp))
-                        Text(TrixInline.parse(item, c, onLink), color = ink, fontSize = 15.sp, lineHeight = 22.sp)
+                        Text(TrixInline.parse(item, c, onLink, ink), color = ink, fontSize = 15.sp, lineHeight = 22.sp)
                     }
                 }
             }
@@ -147,13 +147,13 @@ private fun TrixBlockView(block: TrixBlock, onLink: (String) -> Unit, textColor:
         is TrixBlock.Image -> ZoomableTrixImage(block.url)
         is TrixBlock.Video -> VideoBlock(block.url)
         is TrixBlock.YouTube -> YouTubeCard(block.id)
-        is TrixBlock.Table -> TrixTableView(block.rowsHtml, onLink)
+        is TrixBlock.Table -> TrixTableView(block.rowsHtml, onLink, ink)
         TrixBlock.Rule -> Divider(color = c.line)
     }
 }
 
 @Composable
-private fun TrixTableView(rows: List<List<String>>, onLink: (String) -> Unit) {
+private fun TrixTableView(rows: List<List<String>>, onLink: (String) -> Unit, ink: Color) {
     val c = DcampTheme.colors
     val cols = rows.maxOfOrNull { it.size } ?: 0
     Box(Modifier.horizontalScroll(rememberScrollState())) {
@@ -163,10 +163,10 @@ private fun TrixTableView(rows: List<List<String>>, onLink: (String) -> Unit) {
                     for (col in 0 until cols) {
                         val cell = row.getOrNull(col) ?: ""
                         Text(
-                            TrixInline.parse(cell, c, onLink),
+                            TrixInline.parse(cell, c, onLink, ink),
                             fontSize = 14.sp,
                             fontWeight = if (r == 0) FontWeight.Bold else FontWeight.Normal,
-                            color = c.ink,
+                            color = ink,
                             modifier = Modifier
                                 .width(150.dp)
                                 .background(if (r == 0) c.panel else Color.Transparent)
