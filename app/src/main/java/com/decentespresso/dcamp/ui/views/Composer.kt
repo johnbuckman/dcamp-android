@@ -226,7 +226,14 @@ fun InlineComposer(placeholder: String, model: ComposerModel, draftKey: String? 
     }
     // While a toolbar modal (e.g. Insert table) is open, grow the composer so the modal —
     // a fixed overlay inside the WebView — isn't clipped by a short inline composer.
-    val composerHeight = if (model.growForModal) 360 else (model.contentHeight + 44).coerceIn(120, 280)
+    // Cap the editor by the room actually left above the keyboard: on the DM screen (extra header row)
+    // a full 280dp editor + Send didn't fit and the Send button was clipped under the keyboard. The
+    // editor scrolls internally, so a shorter frame loses nothing. ~200dp = top bar + screen header +
+    // Send row + paddings.
+    val imeBottomDp = with(LocalDensity.current) { WindowInsets.ime.getBottom(this).toDp().value }
+    val roomDp = androidx.compose.ui.platform.LocalConfiguration.current.screenHeightDp - imeBottomDp - 200
+    val maxEditor = roomDp.toInt().coerceIn(120, 360)
+    val composerHeight = if (model.growForModal) 360.coerceAtMost(maxOf(maxEditor, 200)) else (model.contentHeight + 44).coerceIn(120, minOf(280, maxEditor))
 
     fun send() {
         if (sending) return
@@ -264,7 +271,8 @@ fun InlineComposer(placeholder: String, model: ComposerModel, draftKey: String? 
     LaunchedEffect(model) {
         snapshotFlow { Triple(model.focused, ime.getBottom(density), model.contentHeight + if (model.growForModal) 1 else 0) }
             .collectLatest { (focused, imeBottom, _) ->
-                if (focused && imeBottom > 0) { delay(60); bringIntoView.bringIntoView() }
+                // also when a toolbar dialog/modal grows the composer (it may be the last list item)
+                if ((focused && imeBottom > 0) || model.growForModal) { delay(60); bringIntoView.bringIntoView() }
             }
     }
 

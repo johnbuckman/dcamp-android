@@ -30,6 +30,14 @@
   trix-toolbar .trix-button-group { border-color: var(--dc-line); }
   trix-toolbar .trix-dialog { background: var(--dc-panel); color: var(--dc-ink);
     border-top-color: var(--dc-line); box-shadow: 0 0.3em 1em rgba(0,0,0,.35); }
+  /* The toolbar sits at the BOTTOM, but trix.css drops its dialogs (link) DOWN from it — off the
+     bottom of a short inline composer. Anchor them to the toolbar itself and open upward. */
+  trix-toolbar .trix-dialogs { position: static; }
+  trix-toolbar .trix-dialog { top: auto; bottom: 100%; margin-bottom: 4px; }
+  /* phone width: URL field on its own line, the (5) buttons wrap below it instead of running off-screen */
+  trix-toolbar .trix-dialog__link-fields { flex-wrap: wrap; row-gap: 8px; }
+  trix-toolbar .trix-dialog__link-fields .trix-input { flex: 1 1 100%; margin-right: 0; }
+  trix-toolbar .trix-dialog__link-fields .trix-button-group { flex-wrap: wrap; margin-left: 0; }
   trix-toolbar .trix-input--dialog { background-color: var(--dc-panel); color: var(--dc-ink); border-color: var(--dc-line); }
   .trix-content blockquote { border-color: var(--dc-line); }
   .trix-content pre { background-color: color-mix(in srgb, var(--dc-ink) 8%, var(--dc-panel)); color: var(--dc-ink); }
@@ -111,8 +119,14 @@
   // Notify Swift as content changes (so it can enable/disable Post) and report the
   // editor's natural content height so the inline composer can auto-grow (#9).
   function contentHeight() {
-    // trix-editor's own scrollHeight = the rendered text height (excludes the toolbar).
-    return Math.ceil(editorEl.scrollHeight || 0);
+    // The rendered TEXT height (excludes the toolbar). Not scrollHeight: the editor flex-fills the
+    // frame, so once the host grew it (a dialog/modal) scrollHeight reported the grown size and
+    // the composer never shrank back. Measure to the bottom of the last block instead.
+    var last = editorEl.lastElementChild;
+    if (!last) return 44;
+    var top = editorEl.getBoundingClientRect().top;
+    var pad = parseFloat(getComputedStyle(editorEl).paddingBottom) || 0;
+    return Math.ceil(last.getBoundingClientRect().bottom - top + editorEl.scrollTop + pad);
   }
   editorEl.addEventListener("trix-change", function () {
     post({ type: "change", html: input.value, length: editorEl.editor.getDocument().toString().trim().length, height: contentHeight() });
@@ -143,7 +157,13 @@
     if (dcInited) return; dcInited = true;
     pullDraft(); post({ type: "ready" }); buildToolbar(); addLinkDialogButtons(); fitEditor(); post({ type: "change", html: input.value, length: 0, height: contentHeight() });
   }
-  editorEl.addEventListener("trix-initialize", onTrixInit);   // (+ catch-up call at the end of this script)
+  editorEl.addEventListener("trix-initialize", onTrixInit);
+  // Link dialog: ask the host for room (same "grow" the table modal uses) while it's open.
+  editorEl.addEventListener("trix-toolbar-dialog-show", function () { post({ type: "grow", on: 1 }); });
+  editorEl.addEventListener("trix-toolbar-dialog-hide", function () {
+    post({ type: "grow", on: 0 });
+    post({ type: "change", html: input.value, length: editorEl.editor.getDocument().toString().trim().length, height: contentHeight() });
+  });   // (+ catch-up call at the end of this script)
 
   // ⌘↵ / Ctrl+↵ submits (matches the web's bindCmdEnter).
   editorEl.addEventListener("keydown", function (e) {
