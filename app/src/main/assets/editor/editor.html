@@ -8,7 +8,7 @@
     font: -apple-system-body; background: transparent;
     -webkit-text-size-adjust: 100%; }
   body { display: flex; flex-direction: column; }
-  form { display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0; }
+  form { display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0; margin: 0; }
   /* Formatting toolbar lives at the BOTTOM of the composer (right above the keyboard) so
      Android's system text-selection menu — which pops above the selection — lands in the
      empty content area, not over the toolbar buttons. */
@@ -19,7 +19,9 @@
      posts to the host (native photo picker). NOTE the hyphens: Trix's real class names. */
   trix-toolbar .trix-button-group--file-tools,
   trix-toolbar .trix-button--icon-attach { display: none; }
-  trix-editor { border: none; min-height: 44px; padding: 12px 14px;
+  /* The editor scrolls inside itself, so once the host's height cap is reached the text
+     never runs under the toolbar. */
+  trix-editor { border: none; min-height: 44px; padding: 12px 14px; overflow-y: auto;
     font: -apple-system-body; outline: none; order: 1; flex: 1 1 auto; }
   trix-editor:empty:not(:focus)::before { color: color-mix(in srgb, canvasText 40%, transparent); }
   /* our injected toolbar buttons (HR + colour) match Trix's built-in buttons */

@@ -10,7 +10,10 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.ime
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -27,6 +30,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -37,13 +41,18 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInWindow
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import androidx.compose.ui.window.DialogWindowProvider
 import com.decentespresso.dcamp.api.AppConfig
 import com.decentespresso.dcamp.api.Board
 import com.decentespresso.dcamp.api.ChatLine
@@ -190,8 +199,24 @@ fun ComposeView(mode: ComposeMode, session: SessionStore.State, onPosted: (Int) 
 
     val canPost = !posting && (!isNewThread || subject.trim().isNotEmpty())
 
+    // A Dialog is its own window: MainView's IME padding doesn't reach it and Compose gets no
+    // insets inside it, so the keyboard covered the bottom of the body and the toolbar. Take the
+    // keyboard's top edge from the activity window and pad the dialog's content up to it.
+    val density = LocalDensity.current
+    val activityView = LocalView.current
+    val obstructionPx = maxOf(WindowInsets.ime.getBottom(density), WindowInsets.navigationBars.getBottom(density))
     Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
-        Column(Modifier.fillMaxSize().background(c.bg)) {
+        val dialogWindow = (LocalView.current.parent as? DialogWindowProvider)?.window
+        SideEffect {   // stop the system panning the dialog as well
+            dialogWindow?.setSoftInputMode(android.view.WindowManager.LayoutParams.SOFT_INPUT_ADJUST_NOTHING)
+        }
+        var contentBottomOnScreen by remember { mutableIntStateOf(0) }
+        val keyboardTopOnScreen = IntArray(2).also { activityView.getLocationOnScreen(it) }[1] + activityView.height - obstructionPx
+        val bottomPad = with(density) { (contentBottomOnScreen - keyboardTopOnScreen).coerceAtLeast(0).toDp() }
+        Column(Modifier.fillMaxSize().background(c.bg)
+            .onGloballyPositioned { contentBottomOnScreen = (it.positionInWindow().y + it.size.height).toInt() +
+                IntArray(2).also { l -> (dialogWindow?.decorView ?: activityView).getLocationOnScreen(l) }[1] }
+            .padding(bottom = bottomPad)) {
             // Top bar
             Row(Modifier.fillMaxWidth().statusBarsPadding().padding(horizontal = 12.dp, vertical = 10.dp),
                 verticalAlignment = Alignment.CenterVertically) {

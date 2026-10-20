@@ -6,7 +6,12 @@ import android.webkit.WebView
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.ime
+import androidx.compose.foundation.relocation.BringIntoViewRequester
+import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -18,6 +23,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -29,6 +35,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.layout.LocalPinnableContainer
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -42,6 +50,7 @@ import com.decentespresso.dcamp.ui.theme.MachineBadge
 import com.decentespresso.dcamp.ui.theme.DcampTheme
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonObject
@@ -59,6 +68,7 @@ class ComposerModel {
     var webView: WebView? = null
     var ready by mutableStateOf(false)
     var contentHeight by mutableStateOf(0)
+    var focused by mutableStateOf(false)        // the editor WebView has input focus
     var growForModal by mutableStateOf(false)   // a toolbar modal (table) is open → give it room
     var mentionQuery by mutableStateOf<String?>(null)
     var submitRequested by mutableStateOf(0)
@@ -158,6 +168,7 @@ internal fun uriDisplayName(context: android.content.Context, uri: android.net.U
  * composers. [onSend] receives the HTML and returns whether it succeeded (text is kept on
  * failure). Read-only sessions never see this (callers gate on canPost).
  */
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun InlineComposer(placeholder: String, model: ComposerModel, draftKey: String? = null, onSend: suspend (String) -> Boolean) {
     val c = DcampTheme.colors
@@ -211,8 +222,27 @@ fun InlineComposer(placeholder: String, model: ComposerModel, draftKey: String? 
     }
     LaunchedEffect(model) { snapshotFlow { model.submitRequested }.collect { if (it > 0) send() } }
     LaunchedEffect(model) { snapshotFlow { model.attachRequested }.collect { if (it > 0) filePicker.launch("*/*") } }
+    // Keep the composer above the keyboard: when it's focused, and each time the IME animates
+    // or the editor grows, scroll the enclosing list (thread comments) so its bottom is visible.
+    val bringIntoView = remember { BringIntoViewRequester() }
+    // Opening the keyboard shrinks the list; if this lazy item scrolls out of the viewport the
+    // list disposes it, its WebView loses focus and the keyboard closes again. The WebView's
+    // View focus isn't Compose focus, so pin the item ourselves while it's focused.
+    val pinnable = LocalPinnableContainer.current
+    DisposableEffect(model.focused, pinnable) {
+        val handle = if (model.focused) pinnable?.pin() else null
+        onDispose { handle?.release() }
+    }
+    val ime = WindowInsets.ime
+    val density = LocalDensity.current
+    LaunchedEffect(model) {
+        snapshotFlow { Triple(model.focused, ime.getBottom(density), model.contentHeight + if (model.growForModal) 1 else 0) }
+            .collectLatest { (focused, imeBottom, _) ->
+                if (focused && imeBottom > 0) { delay(60); bringIntoView.bringIntoView() }
+            }
+    }
 
-    Column(Modifier.fillMaxWidth().background(c.bg).padding(horizontal = 12.dp, vertical = 10.dp),
+    Column(Modifier.fillMaxWidth().bringIntoViewRequester(bringIntoView).background(c.bg).padding(horizontal = 12.dp, vertical = 10.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Box {
             ComposerWebView(model, Modifier.fillMaxWidth().height(composerHeight.dp)
@@ -235,10 +265,16 @@ internal fun ComposerWebView(model: ComposerModel, modifier: Modifier = Modifier
         modifier = modifier,
         factory = { ctx ->
             WebView(ctx).apply {
+                // AndroidView defaults to WRAP_CONTENT, which makes Chromium size its layout
+                // viewport to the content: html/body height:100% resolve to 0, the editor's flex
+                // form collapses and typed text spills under the toolbar. Fill the given frame.
+                layoutParams = android.view.ViewGroup.LayoutParams(
+                    android.view.ViewGroup.LayoutParams.MATCH_PARENT, android.view.ViewGroup.LayoutParams.MATCH_PARENT)
                 settings.javaScriptEnabled = true
                 settings.domStorageEnabled = true
                 setBackgroundColor(android.graphics.Color.TRANSPARENT)
                 addJavascriptInterface(ComposerBridge(model), "AndroidComposer")
+                setOnFocusChangeListener { _, hasFocus -> model.focused = hasFocus }
                 model.ready = false            // fresh page: JS bridge not loaded yet
                 model.webView = this
                 loadUrl("file:///android_asset/editor/editor.html")
@@ -246,7 +282,7 @@ internal fun ComposerWebView(model: ComposerModel, modifier: Modifier = Modifier
         },
         // When this lazy item scrolls off-screen it's disposed; drop the stale WebView so a
         // later insertQuote/loadHTML buffers instead of evaluating into a dead page.
-        onRelease = { web -> if (model.webView === web) { model.webView = null; model.ready = false } },
+        onRelease = { web -> if (model.webView === web) { model.webView = null; model.ready = false; model.focused = false } },
     )
 }
 

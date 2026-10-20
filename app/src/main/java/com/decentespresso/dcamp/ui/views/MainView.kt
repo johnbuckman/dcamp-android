@@ -14,6 +14,8 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
@@ -107,7 +109,10 @@ fun MainView(session: SessionStore, state: SessionStore.State) {
     androidx.compose.runtime.CompositionLocalProvider(LocalRouter provides router,
         com.decentespresso.dcamp.ui.LocalForumFilter provides forumFilter,
         LocalSummaryPin provides summaryPin) {
-        Box(Modifier.fillMaxSize()) {
+        // Edge-to-edge is enforced on Android 15+, so the manifest's adjustResize no longer
+        // shrinks the window for the keyboard: pad for the nav bar + IME ourselves, or the
+        // keyboard covers the chat/DM/comment composers.
+        Box(Modifier.fillMaxSize().background(c.bg).navigationBarsPadding().imePadding()) {
         Column(Modifier.fillMaxSize().background(c.bg)) {
             TopBar(session, state, showBack = router.backStack.isNotEmpty(), onBack = { router.pop() })
             toast?.let { n ->
