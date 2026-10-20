@@ -312,9 +312,13 @@ private fun DMBubble(message: DMMessage, showSender: Boolean) {
                     Text(it, fontSize = 11.sp, fontWeight = FontWeight.Bold, color = senderTint)
                 }
             }
-            // "mine" bubbles render white text on the blue background.
-            TranslatableText(original = message.html, translated = message.bodyTr,
-                textColor = if (mine) Color.White else c.ink)
+            // "mine" bubbles render white text on the blue background — links and
+            // @mentions too (their own blue/green vanished on the blue bubble).
+            val bubbleColors = if (mine) c.copy(link = Color.White, accentInk = Color.White) else c
+            androidx.compose.runtime.CompositionLocalProvider(com.decentespresso.dcamp.ui.theme.LocalDcampColors provides bubbleColors) {
+                TranslatableText(original = message.html, translated = message.bodyTr,
+                    textColor = if (mine) Color.White else c.ink)
+            }
             Text(com.decentespresso.dcamp.ui.theme.RelativeTime.string(message.createdAt),
                 fontSize = 11.sp, color = if (mine) Color.White.copy(alpha = 0.75f) else c.muted)
         }
