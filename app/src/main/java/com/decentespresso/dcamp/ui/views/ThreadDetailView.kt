@@ -164,8 +164,8 @@ fun ThreadDetailView(messageID: Int, session: SessionStore.State) {
                 item {
                     if (session.canPost) {
                         Column(Modifier.fillMaxWidth().padding(top = 6.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Text(T("Add a comment"), fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = c.ink)
-                            InlineComposer(T("Write a comment… (rich text, @mention)"), composerModel, draftKey = "comment:$currentID") { html ->
+                            InlineComposer(T("Write a comment… (rich text, @mention)"), composerModel, draftKey = "comment:$currentID",
+                                title = T("Add a comment")) { html ->
                                 val r = runCatching { Services.api.createComment(currentID, html) }.getOrNull()
                                 if (r?.id != null) {
                                     scope.launch { load() }

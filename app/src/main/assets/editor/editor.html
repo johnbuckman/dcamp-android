@@ -54,6 +54,37 @@
   trix-toolbar { position: sticky; bottom: 0; z-index: 2; order: 2;
     background: var(--dc-panel); padding: 4px 6px;
     border-top: 1px solid color-mix(in srgb, var(--dc-ink) 15%, transparent); }
+  /* Toolbar buttons: a 44px minimum touch target (Apple HIG / WCAG 2.5.5), never smaller
+     (trix.css shrank phone icons to ~27px). They stay on ONE row so the text area keeps its
+     height; when they don't fit, the row scrolls sideways and ‹ › chevrons appear at the
+     edges that have more buttons (see setupToolbarScroll). */
+  trix-toolbar .trix-button-row { flex-wrap: nowrap; overflow-x: auto; justify-content: flex-start; gap: 4px;
+    scrollbar-width: none; scroll-behavior: smooth; }
+  trix-toolbar .trix-button-row::-webkit-scrollbar { display: none; }
+  /* groups dissolve so all buttons scroll as one row */
+  trix-toolbar .trix-button-row > .trix-button-group { display: contents; }
+  trix-toolbar .trix-button-group-spacer { display: none; }
+  trix-toolbar .trix-button { flex: 0 0 auto; min-width: 44px; min-height: 44px; max-width: none;
+    border: 1px solid var(--dc-line) !important; border-radius: 8px; }
+  trix-toolbar .trix-button--icon { width: 44px; height: 44px; max-width: none; }
+  trix-toolbar .trix-button--icon::before { left: 10px; right: 10px; top: 10px; bottom: 10px; }
+  trix-toolbar .trix-hr-btn, trix-toolbar .dc-color-btn, trix-toolbar .trix-table-btn,
+  trix-toolbar .dc-attach-btn { display: inline-flex; align-items: center; justify-content: center; }
+  /* hide buttons that can't be used right now (undo/redo with no history, indent outside a list) */
+  trix-toolbar .trix-button-row .trix-button:disabled { display: none; }
+  /* Trix only computes button state once the editor has a selection; until then these start hidden */
+  trix-toolbar:not(.dc-live) [data-trix-action=undo], trix-toolbar:not(.dc-live) [data-trix-action=redo],
+  trix-toolbar:not(.dc-live) [data-trix-action=increaseNestingLevel],
+  trix-toolbar:not(.dc-live) [data-trix-action=decreaseNestingLevel] { display: none; }
+  /* scroll chevrons, over the row's ends */
+  .dc-chev { position: absolute; top: 4px; bottom: 4px; width: 36px; z-index: 3; display: none;
+    align-items: center; justify-content: center; border: none; padding: 0; cursor: pointer;
+    color: var(--dc-ink); font: 700 32px/1 -apple-system, sans-serif; }
+  .dc-chev.on { display: flex; }
+  .dc-chev-l { left: 0; background: linear-gradient(to right, var(--dc-panel) 65%, transparent); justify-content: flex-start; padding-left: 6px; }
+  .dc-chev-r { right: 0; background: linear-gradient(to left, var(--dc-panel) 65%, transparent); justify-content: flex-end; padding-right: 6px; }
+  /* dialog buttons (link Go / Unlink …) are text buttons, not icons */
+  trix-toolbar .trix-dialog .trix-button { min-width: 0; padding: 0 12px; }
   /* drop Trix's built-in file button — the app provides its own "Attach image" button that
      posts to the host (native photo picker). NOTE the hyphens: Trix's real class names. */
   trix-toolbar .trix-button-group--file-tools,
@@ -129,7 +160,21 @@
     return Math.ceil(last.getBoundingClientRect().bottom - top + editorEl.scrollTop + pad);
   }
   editorEl.addEventListener("trix-change", function () {
-    post({ type: "change", html: input.value, length: editorEl.editor.getDocument().toString().trim().length, height: contentHeight() });
+    post({ type: "change", html: input.value, length: editorEl.editor.getDocument().toString().trim().length, height: contentHeight(), toolbar: toolbarHeight() });
+  });
+  // The toolbar wraps to 1–3 rows depending on width; the host adds this to the text height.
+  function toolbarHeight() { return editorEl.toolbarElement ? Math.ceil(editorEl.toolbarElement.offsetHeight) : 0; }
+  // Disabled buttons are hidden, so the row count can change with the cursor (indent appears in a
+  // list, undo after the first edit): Trix updates button state on selection change → re-report.
+  var lastToolbarH = -1;
+  editorEl.addEventListener("trix-selection-change", function () {
+    if (editorEl.toolbarElement) editorEl.toolbarElement.classList.add("dc-live");
+    requestAnimationFrame(function () {
+      var h = toolbarHeight();
+      if (h === lastToolbarH || !editorEl.editor) return;
+      lastToolbarH = h;
+      post({ type: "change", html: input.value, length: editorEl.editor.getDocument().toString().trim().length, height: contentHeight(), toolbar: h });
+    });
   });
   // In a TALL host (full-screen ComposeView) let the editor fill the space so the
   // whole area is tappable; in a SHORT host (inline chat/DM composer) keep it compact
@@ -138,6 +183,8 @@
     var toolbarH = editorEl.toolbarElement ? editorEl.toolbarElement.offsetHeight : 0;
     var avail = window.innerHeight - toolbarH;
     editorEl.style.minHeight = (avail > 360 ? Math.max(44, avail - 16) : 44) + "px";
+    // a rotation can change how many rows the toolbar wraps to
+    if (editorEl.editor) post({ type: "change", html: input.value, length: editorEl.editor.getDocument().toString().trim().length, height: contentHeight(), toolbar: toolbarHeight() });
   }
   window.addEventListener("resize", fitEditor);
   // Android: pull the saved draft and load it BEFORE reporting ready (host pushes raced the init).
@@ -155,7 +202,7 @@
   var dcInited = false;
   function onTrixInit() {
     if (dcInited) return; dcInited = true;
-    pullDraft(); post({ type: "ready" }); buildToolbar(); addLinkDialogButtons(); fitEditor(); post({ type: "change", html: input.value, length: 0, height: contentHeight() });
+    pullDraft(); post({ type: "ready" }); buildToolbar(); setupToolbarScroll(); addLinkDialogButtons(); fitEditor(); post({ type: "change", html: input.value, length: 0, height: contentHeight(), toolbar: toolbarHeight() });
   }
   editorEl.addEventListener("trix-initialize", onTrixInit);
   // Link dialog: ask the host for room (same "grow" the table modal uses) while it's open.
@@ -361,6 +408,29 @@
       href.addEventListener("focus", syncEmbed);
       syncEmbed();
     }
+  }
+
+  // One-row toolbar that scrolls sideways: ‹ › chevrons show only on the side(s) with more buttons.
+  function setupToolbarScroll() {
+    var tb = editorEl.toolbarElement, row = tb && tb.querySelector(".trix-button-row");
+    if (!row || tb.querySelector(".dc-chev")) return;
+    function chev(cls, label, dir) {
+      var b = document.createElement("button");
+      b.type = "button"; b.className = "dc-chev " + cls; b.tabIndex = -1;
+      b.setAttribute("aria-label", label); b.textContent = dir < 0 ? "‹" : "›";
+      b.addEventListener("mousedown", function (e) { e.preventDefault(); row.scrollBy({ left: dir * row.clientWidth * 0.7 }); });
+      tb.appendChild(b); return b;
+    }
+    var l = chev("dc-chev-l", "More buttons left", -1), r = chev("dc-chev-r", "More buttons right", 1);
+    function update() {
+      var max = row.scrollWidth - row.clientWidth;
+      l.classList.toggle("on", row.scrollLeft > 2);
+      r.classList.toggle("on", row.scrollLeft < max - 2);
+    }
+    row.addEventListener("scroll", update, { passive: true });
+    window.addEventListener("resize", update);
+    editorEl.addEventListener("trix-selection-change", function () { requestAnimationFrame(update); });
+    update();
   }
 
   function buildToolbar() {

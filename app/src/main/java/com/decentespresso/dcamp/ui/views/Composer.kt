@@ -68,10 +68,14 @@ import kotlinx.serialization.json.intOrNull
  * via the JS "composer" bridge; posting reads dcampGetHTML() on demand (never gated on a
  * change event — the "Send does nothing" iOS bug).
  */
+/** Writing area of an inline composer: at least 3 lines of text (+ editor padding). */
+private const val MIN_TEXT_DP = 96
+
 class ComposerModel {
     var webView: WebView? = null
     var ready by mutableStateOf(false)
     var contentHeight by mutableStateOf(0)
+    var toolbarHeight by mutableStateOf(44)     // formatting toolbar; wraps to 2+ rows on a phone
     var focused by mutableStateOf(false)        // the editor WebView has input focus
     var growForModal by mutableStateOf(false)   // a toolbar modal (table) is open → give it room
     var mentionQuery by mutableStateOf<String?>(null)
@@ -156,6 +160,7 @@ class ComposerModel {
                 "change" -> {
                     lastHtml = obj["html"]?.jsonPrimitive?.contentOrNull ?: ""
                     obj["height"]?.jsonPrimitive?.intOrNull?.let { if (it > 0) contentHeight = it }
+                    obj["toolbar"]?.jsonPrimitive?.intOrNull?.let { if (it > 0) toolbarHeight = it }
                     if (draftRestored) draftKey?.let { k ->
                         if (PlainText.strip(lastHtml).isEmpty()) com.decentespresso.dcamp.api.AppConfig.clearDraft(k)
                         else com.decentespresso.dcamp.api.AppConfig.setDraft(k, lastHtml)
@@ -196,7 +201,8 @@ internal fun uriDisplayName(context: android.content.Context, uri: android.net.U
  */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-fun InlineComposer(placeholder: String, model: ComposerModel, draftKey: String? = null, onSend: suspend (String) -> Boolean) {
+fun InlineComposer(placeholder: String, model: ComposerModel, draftKey: String? = null,
+                   title: String? = null, onSend: suspend (String) -> Boolean) {
     val c = DcampTheme.colors
     val scope = rememberCoroutineScope()
     val context = androidx.compose.ui.platform.LocalContext.current
@@ -233,7 +239,9 @@ fun InlineComposer(placeholder: String, model: ComposerModel, draftKey: String? 
     val imeBottomDp = with(LocalDensity.current) { WindowInsets.ime.getBottom(this).toDp().value }
     val roomDp = androidx.compose.ui.platform.LocalConfiguration.current.screenHeightDp - imeBottomDp - 200
     val maxEditor = roomDp.toInt().coerceIn(120, 360)
-    val composerHeight = if (model.growForModal) 360.coerceAtMost(maxOf(maxEditor, 200)) else (model.contentHeight + 44).coerceIn(120, minOf(280, maxEditor))
+    val composerHeight = if (model.growForModal) 360.coerceAtMost(maxOf(maxEditor, 200)) else (maxOf(model.contentHeight, MIN_TEXT_DP) + model.toolbarHeight)
+        // the room cap wins (keyboard open), but never below 3 lines of text above the toolbar
+        .coerceIn(model.toolbarHeight + MIN_TEXT_DP, maxOf(minOf(280, maxEditor), model.toolbarHeight + MIN_TEXT_DP))
 
     fun send() {
         if (sending) return
@@ -278,17 +286,26 @@ fun InlineComposer(placeholder: String, model: ComposerModel, draftKey: String? 
 
     Column(Modifier.fillMaxWidth().bringIntoViewRequester(bringIntoView).background(c.bg).padding(horizontal = 12.dp, vertical = 10.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        val sendButton = @Composable {
+            Text(T("Send"), color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.Bold,
+                modifier = Modifier.background(if (sending) c.accent.copy(alpha = 0.5f) else c.accent, RoundedCornerShape(10.dp))
+                    .clickable(enabled = !sending) { send() }.padding(horizontal = 16.dp, vertical = 10.dp))
+        }
+        // With a title ("Add a comment") Send sits on the title's line, freeing a row below the
+        // composer for text (the wrapped 44px toolbar is tall on a phone).
+        if (title != null) {
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Text(title, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = c.ink, modifier = Modifier.weight(1f))
+                sendButton()
+            }
+        }
         Box {
             ComposerWebView(model, Modifier.fillMaxWidth().height(composerHeight.dp)
                 .background(c.panel, RoundedCornerShape(12.dp))
                 .border(1.dp, c.lineStrong, RoundedCornerShape(12.dp)))
             MentionOverlay(model, Modifier.align(Alignment.TopStart).padding(top = 52.dp, start = 8.dp, end = 8.dp))
         }
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-            Text(T("Send"), color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.Bold,
-                modifier = Modifier.background(if (sending) c.accent.copy(alpha = 0.5f) else c.accent, RoundedCornerShape(10.dp))
-                    .clickable(enabled = !sending) { send() }.padding(horizontal = 16.dp, vertical = 10.dp))
-        }
+        if (title == null) Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) { sendButton() }
     }
 }
 
