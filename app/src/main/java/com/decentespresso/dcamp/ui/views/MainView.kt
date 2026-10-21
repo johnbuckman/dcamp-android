@@ -91,20 +91,40 @@ fun MainView(session: SessionStore, state: SessionStore.State) {
     // Foreground notification toast: poll for new notifications and surface the newest.
     var toast by remember { androidx.compose.runtime.mutableStateOf<com.decentespresso.dcamp.api.Notif?>(null) }
     var lastNotifMax by remember { androidx.compose.runtime.mutableIntStateOf(-1) }
+    val appContext = androidx.compose.ui.platform.LocalContext.current.applicationContext
     androidx.compose.runtime.LaunchedEffect(Unit) {
         while (true) {
             val items = runCatching { Services.api.notifPoll() }.getOrDefault(emptyList())
             val newest = items.maxByOrNull { it.id }
-            if (newest != null && lastNotifMax >= 0 && newest.id > lastNotifMax) {
+            // This loop keeps running after the app is backgrounded: post to the phone then,
+            // or the items would be acked below without the user ever seeing them.
+            val background = !com.decentespresso.dcamp.push.PhoneNotifications.inForeground
+            if (background && lastNotifMax >= 0) {
+                items.filter { it.id > lastNotifMax }.forEach { com.decentespresso.dcamp.push.PhoneNotifications.post(appContext, it) }
+            } else if (newest != null && lastNotifMax >= 0 && newest.id > lastNotifMax) {
                 toast = newest
                 val id = newest.id
                 launch { kotlinx.coroutines.delay(4000); if (toast?.id == id) toast = null }
             }
             if (newest != null) lastNotifMax = maxOf(lastNotifMax, newest.id)
             else if (lastNotifMax < 0) lastNotifMax = 0
+            // Ack like web/iOS: notif_poll returns the OLDEST 25 unseen, so never acking
+            // stalled the toast (and would replay them as phone notifications later).
+            if (items.isNotEmpty()) Services.api.notifSeen(items.map { it.id })
             kotlinx.coroutines.delay(30000)
         }
     }
+
+    // A tapped phone notification opens its thread / DM.
+    val pendingRoute by com.decentespresso.dcamp.push.PhoneNotifications.pendingRoute.collectAsState()
+    androidx.compose.runtime.LaunchedEffect(pendingRoute) {
+        pendingRoute?.let { r ->
+            com.decentespresso.dcamp.push.PhoneNotifications.pendingRoute.value = null
+            router.open(r)
+        }
+    }
+
+    NotificationPermissionPrompt()
 
     androidx.compose.runtime.CompositionLocalProvider(LocalRouter provides router,
         com.decentespresso.dcamp.ui.LocalForumFilter provides forumFilter,
@@ -337,4 +357,44 @@ private fun NotifToast(notif: com.decentespresso.dcamp.api.Notif, onTap: () -> U
         }
         Text("›", color = c.muted, fontSize = 18.sp)
     }
+}
+
+/**
+ * Ask once (Android 13+) for permission to post phone notifications, with a short explanation
+ * first. Declining is remembered; Settings → Notifications has a way back in.
+ */
+@Composable
+private fun NotificationPermissionPrompt() {
+    if (android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.TIRAMISU) return
+    val ctx = androidx.compose.ui.platform.LocalContext.current
+    val c = DcampTheme.colors
+    var show by remember {
+        androidx.compose.runtime.mutableStateOf(
+            !com.decentespresso.dcamp.push.PhoneNotifications.hasPermission(ctx) &&
+                !com.decentespresso.dcamp.api.AppConfig.askedNotifPermission)
+    }
+    val launcher = androidx.activity.compose.rememberLauncherForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.RequestPermission()) { }
+    if (!show) return
+    androidx.compose.material3.AlertDialog(
+        onDismissRequest = { show = false; com.decentespresso.dcamp.api.AppConfig.askedNotifPermission = true },
+        containerColor = c.panel,
+        title = { Text(T("Get notified?"), color = c.ink) },
+        text = {
+            Text(T("dcamp can notify you about direct messages, @mentions and replies, even when the app is closed. Choose which kinds in Settings."),
+                color = c.inkSoft)
+        },
+        confirmButton = {
+            androidx.compose.material3.TextButton(onClick = {
+                show = false
+                com.decentespresso.dcamp.api.AppConfig.askedNotifPermission = true
+                launcher.launch(android.Manifest.permission.POST_NOTIFICATIONS)
+            }) { Text(T("Continue"), color = c.accent) }
+        },
+        dismissButton = {
+            androidx.compose.material3.TextButton(onClick = {
+                show = false; com.decentespresso.dcamp.api.AppConfig.askedNotifPermission = true
+            }) { Text(T("Not now"), color = c.inkSoft) }
+        },
+    )
 }

@@ -3,6 +3,9 @@
 
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <!-- Phone notifications (Android 13+ runtime permission). Without it the system shows
+         "All notifications from this app are blocked" with the switch greyed out. -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <!-- Self-update: install a downloaded release APK (sideloaded build only). -->
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
 

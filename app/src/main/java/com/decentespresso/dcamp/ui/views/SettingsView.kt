@@ -173,6 +173,7 @@ fun SettingsView(session: SessionStore, state: SessionStore.State) {
         }
 
         SettingsSection(T("Notifications")) {
+            PhoneNotificationsRow()
             notifKinds.forEach { (key, label) ->
                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     Text(T(label), fontSize = 14.sp, fontWeight = FontWeight.Medium, color = c.ink)
@@ -293,4 +294,32 @@ private fun TogglePill(label: String, active: Boolean, onClick: () -> Unit) {
         modifier = Modifier.background(if (active) c.accent else c.bg, RoundedCornerShape(8.dp))
             .border(1.dp, if (active) c.accent else c.lineStrong, RoundedCornerShape(8.dp))
             .clickable { onClick() }.padding(horizontal = 14.dp, vertical = 6.dp))
+}
+
+/**
+ * Whether phone notifications are on, with a shortcut to the system page to change it.
+ * "Popup" below decides which kinds reach the phone. Re-checked on resume.
+ */
+@Composable
+private fun PhoneNotificationsRow() {
+    val c = DcampTheme.colors
+    val ctx = androidx.compose.ui.platform.LocalContext.current
+    var on by remember { mutableStateOf(com.decentespresso.dcamp.push.PhoneNotifications.enabled(ctx)) }
+    val owner = androidx.lifecycle.compose.LocalLifecycleOwner.current
+    androidx.compose.runtime.DisposableEffect(owner) {
+        val obs = androidx.lifecycle.LifecycleEventObserver { _, e ->
+            if (e == androidx.lifecycle.Lifecycle.Event.ON_RESUME) on = com.decentespresso.dcamp.push.PhoneNotifications.enabled(ctx)
+        }
+        owner.lifecycle.addObserver(obs)
+        onDispose { owner.lifecycle.removeObserver(obs) }
+    }
+    Row(Modifier.fillMaxWidth().clickable { com.decentespresso.dcamp.push.PhoneNotifications.openSettings(ctx) },
+        verticalAlignment = Alignment.CenterVertically) {
+        Column(Modifier.weight(1f)) {
+            Text(T("Phone notifications"), fontSize = 14.sp, fontWeight = FontWeight.Medium, color = c.ink)
+            Text(if (on) T("On — kinds marked Popup are sent to this phone") else T("Off — tap to turn on in Android settings"),
+                fontSize = 13.sp, color = c.inkSoft)
+        }
+        Text(T("Change"), color = c.link, fontSize = 14.sp)
+    }
 }

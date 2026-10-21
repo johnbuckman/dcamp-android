@@ -75,6 +75,11 @@ object AppConfig {
         get() = if (::prefs.isInitialized) prefs.getLong("dcamp_last_update_check", 0L) else 0L
         set(v) { if (::prefs.isInitialized) prefs.edit().putLong("dcamp_last_update_check", v).apply() }
 
+    /** Whether we've already asked for the Android 13+ notification permission. */
+    var askedNotifPermission: Boolean
+        get() = if (::prefs.isInitialized) prefs.getBoolean("dcamp_asked_notif_perm", false) else false
+        set(v) { if (::prefs.isInitialized) prefs.edit().putBoolean("dcamp_asked_notif_perm", v).apply() }
+
     /** Per-context composer draft (keyed). */
     fun getDraft(key: String): String = if (::prefs.isInitialized) prefs.getString("draft_$key", "") ?: "" else ""
     fun setDraft(key: String, html: String) { if (::prefs.isInitialized) prefs.edit().putString("draft_$key", html).apply() }

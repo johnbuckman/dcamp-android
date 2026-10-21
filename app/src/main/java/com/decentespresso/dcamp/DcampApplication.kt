@@ -7,5 +7,6 @@ class DcampApplication : Application() {
     override fun onCreate() {
         super.onCreate()
         Services.init(this)
+        com.decentespresso.dcamp.push.PhoneNotifications.createChannels(this)
     }
 }

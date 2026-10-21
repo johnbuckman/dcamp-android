@@ -28,6 +28,7 @@ import com.decentespresso.dcamp.api.AppConfig
 import com.decentespresso.dcamp.api.OAuthManager
 import com.decentespresso.dcamp.api.Services
 import com.decentespresso.dcamp.api.SessionStore
+import com.decentespresso.dcamp.push.PhoneNotifications
 import com.decentespresso.dcamp.ui.theme.DcampTheme
 import com.decentespresso.dcamp.ui.theme.ThemeMode
 import com.decentespresso.dcamp.ui.views.LoginView
@@ -37,6 +38,7 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         handleAuthRedirect(intent)
+        if (savedInstanceState == null) handleNotificationTap(intent)
         setContent {
             val session = Services.session
             val state by session.state.collectAsState()
@@ -44,6 +46,15 @@ class MainActivity : ComponentActivity() {
             LaunchedEffect(Unit) {
                 com.decentespresso.dcamp.ui.theme.ThemeState.mode = ThemeMode.from(AppConfig.themeRaw)
                 session.start()
+            }
+
+            // Background notification poll runs only while signed in.
+            LaunchedEffect(state.phase) {
+                when (state.phase) {
+                    SessionStore.Phase.LOGGED_IN -> PhoneNotifications.schedule(applicationContext)
+                    SessionStore.Phase.LOGGED_OUT -> PhoneNotifications.cancel(applicationContext)
+                    else -> {}
+                }
             }
 
             // Load server-driven UI strings once we know the viewer's language.
@@ -78,6 +89,24 @@ class MainActivity : ComponentActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         handleAuthRedirect(intent)
+        handleNotificationTap(intent)
+    }
+
+    override fun onStart() {
+        super.onStart()
+        PhoneNotifications.inForeground = true
+    }
+
+    override fun onStop() {
+        super.onStop()
+        PhoneNotifications.inForeground = false
+    }
+
+    /** A tapped phone notification carries its dcamp route; MainView opens it. */
+    private fun handleNotificationTap(intent: Intent?) {
+        val route = intent?.getStringExtra(PhoneNotifications.EXTRA_ROUTE) ?: return
+        intent.removeExtra(PhoneNotifications.EXTRA_ROUTE)
+        if (route.isNotEmpty()) PhoneNotifications.pendingRoute.value = route
     }
 
     private fun handleAuthRedirect(intent: Intent?) {
