@@ -53,6 +53,7 @@ import com.decentespresso.dcamp.api.SessionStore
 import com.decentespresso.dcamp.ui.Dest
 import com.decentespresso.dcamp.ui.LocalRouter
 import com.decentespresso.dcamp.ui.T
+import com.decentespresso.dcamp.ui.rememberRetained
 import com.decentespresso.dcamp.ui.theme.Avatar
 import com.decentespresso.dcamp.ui.theme.AuthorLine
 import com.decentespresso.dcamp.ui.theme.DcampTheme
@@ -147,11 +148,14 @@ fun ChatView(session: SessionStore.State) {
 fun DMListView(session: SessionStore.State) {
     val c = DcampTheme.colors
     val router = LocalRouter.current
-    val convos = remember { mutableStateListOf<DMConversation>() }
+    // Retained so going back from a conversation keeps the loaded pages and scroll position.
+    val convos = rememberRetained("convos") { mutableStateListOf<DMConversation>() }
     var loading by remember { mutableStateOf(false) }
-    var query by remember { mutableStateOf("") }
-    var offset by remember { mutableStateOf(0) }
-    var hasMore by remember { mutableStateOf(true) }
+    var query by rememberRetained("query") { mutableStateOf("") }
+    var offset by rememberRetained("offset") { mutableStateOf(0) }
+    var hasMore by rememberRetained("hasMore") { mutableStateOf(true) }
+    var loadedFor by rememberRetained("loadedFor") { mutableStateOf<String?>(null) }
+    val listState = rememberRetained("list") { androidx.compose.foundation.lazy.LazyListState() }
     var composingNew by remember { mutableStateOf(false) }
 
     suspend fun reload() {
@@ -160,6 +164,7 @@ fun DMListView(session: SessionStore.State) {
             val r = runCatching { Services.api.dmConversations(0, 30, query.trim()) }.getOrNull()
             convos.clear(); convos.addAll(r?.conversations ?: emptyList())
             offset = convos.size; hasMore = r?.hasMore ?: false
+            loadedFor = query
         } finally { loading = false }
     }
     suspend fun loadMore() {
@@ -167,14 +172,26 @@ fun DMListView(session: SessionStore.State) {
         loading = true
         try {
             val r = runCatching { Services.api.dmConversations(offset, 30, query.trim()) }.getOrNull() ?: return
-            convos.addAll(r.conversations); offset += r.conversations.size; hasMore = r.hasMore
+            // Newest-first: a conversation that got a message since the last page repeats here.
+            val have = convos.mapTo(HashSet()) { it.id }
+            convos.addAll(r.conversations.filter { it.id !in have }); offset += r.conversations.size; hasMore = r.hasMore
         } finally { loading = false }
     }
 
-    LaunchedEffect(Unit) { reload() }
-    LaunchedEffect(query) { delay(300); reload() }
+    /** Back from a conversation: update the newest page's rows (unread, last message) in place. */
+    suspend fun refreshInPlace() {
+        val r = runCatching { Services.api.dmConversations(0, 30, query.trim()) }.getOrNull() ?: return
+        val fresh = r.conversations.associateBy { it.id }
+        convos.forEachIndexed { i, cv -> fresh[cv.id]?.let { if (it != cv) convos[i] = it } }
+    }
 
-    LazyColumn(Modifier.fillMaxSize().background(c.bg), contentPadding = androidx.compose.foundation.layout.PaddingValues(18.dp)) {
+    LaunchedEffect(query) {
+        if (convos.isNotEmpty() && loadedFor == query) { refreshInPlace(); return@LaunchedEffect }
+        if (loadedFor != null) delay(300)
+        reload()
+    }
+
+    LazyColumn(Modifier.fillMaxSize().background(c.bg), state = listState, contentPadding = androidx.compose.foundation.layout.PaddingValues(18.dp)) {
         item {
             Row(Modifier.fillMaxWidth().padding(bottom = 12.dp), verticalAlignment = Alignment.CenterVertically) {
                 Text(T("Direct Messages"), fontSize = 22.sp, fontWeight = FontWeight.Black, color = c.ink, modifier = Modifier.weight(1f))

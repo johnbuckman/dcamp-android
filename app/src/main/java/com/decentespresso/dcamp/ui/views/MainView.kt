@@ -148,6 +148,11 @@ fun MainView(session: SessionStore, state: SessionStore.State) {
                     androidx.compose.material3.Divider(Modifier.fillMaxHeight().width(1.dp), color = c.line)
                 }
             Box(Modifier.weight(1f).fillMaxSize()) {
+                // One composition per stack entry, each with its own retained state, so a list
+                // under an open thread comes back with its rows and scroll position.
+                val depth = router.backStack.size
+                androidx.compose.runtime.key(depth, top) {
+                androidx.compose.runtime.CompositionLocalProvider(com.decentespresso.dcamp.ui.LocalRetained provides router.retainedAt(depth)) {
                 when (val d = top) {
                     null -> ForumsHomeView(session, state)
                     is Dest.Board -> {
@@ -164,6 +169,8 @@ fun MainView(session: SessionStore, state: SessionStore.State) {
                     Dest.Settings -> SettingsView(session, state)
                     Dest.EmailSummaries -> EmailSummariesView(state)
                     Dest.Help -> HelpView()
+                }
+                }
                 }
             }
             }

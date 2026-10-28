@@ -75,7 +75,10 @@ fun NotificationsView(session: SessionStore.State) {
     val c = DcampTheme.colors
     val router = LocalRouter.current
     val scope = rememberCoroutineScope()
-    val notifs = remember { mutableStateListOf<Notif>() }
+    // Retained so going back from an opened notification keeps the scroll position; the poll
+    // below still runs and drops the item just opened (it was marked seen).
+    val notifs = com.decentespresso.dcamp.ui.rememberRetained("notifs") { mutableStateListOf<Notif>() }
+    val listState = com.decentespresso.dcamp.ui.rememberRetained("list") { androidx.compose.foundation.lazy.LazyListState() }
 
     LaunchedEffect(Unit) {
         runCatching { Services.api.notifPoll() }.getOrNull()?.let { notifs.clear(); notifs.addAll(it) }
@@ -100,7 +103,7 @@ fun NotificationsView(session: SessionStore.State) {
                 }
             }
         } else {
-            LazyColumn {
+            LazyColumn(state = listState) {
                 items(notifs, key = { it.id }) { notif ->
                     NotifRow(notif) {
                         scope.launch { Services.api.notifSeen(listOf(notif.id)) }

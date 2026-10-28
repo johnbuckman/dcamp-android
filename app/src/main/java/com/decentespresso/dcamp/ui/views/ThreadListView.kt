@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -65,6 +66,7 @@ import com.decentespresso.dcamp.api.messagesPage
 import com.decentespresso.dcamp.ui.Dest
 import com.decentespresso.dcamp.ui.LocalRouter
 import com.decentespresso.dcamp.ui.T
+import com.decentespresso.dcamp.ui.rememberRetained
 import com.decentespresso.dcamp.ui.theme.Avatar
 import com.decentespresso.dcamp.ui.theme.AuthorLine
 import com.decentespresso.dcamp.ui.theme.DcampTheme
@@ -77,10 +79,15 @@ fun ThreadListView(board: Board, session: SessionStore.State) {
     val c = DcampTheme.colors
     val router = LocalRouter.current
     val scope = rememberCoroutineScope()
-    val rows = remember { mutableStateListOf<MessageRow>() }
-    var total by remember { mutableIntStateOf(0) }
+    // Retained (not remembered) so reading a thread and going back keeps the loaded pages
+    // and the scroll position instead of reloading the list at the top.
+    val rows = rememberRetained("rows") { mutableStateListOf<MessageRow>() }
+    var total by rememberRetained("total") { mutableIntStateOf(0) }
+    var fetched by rememberRetained("fetched") { mutableIntStateOf(0) }
     var loading by remember { mutableStateOf(false) }
-    var statusFilter by remember { mutableStateOf("unsolved") }
+    var statusFilter by rememberRetained("status") { mutableStateOf("unsolved") }
+    var loadedFilter by rememberRetained("loadedFor") { mutableStateOf<String?>(null) }
+    val listState = rememberRetained("list") { LazyListState() }
     var composing by remember { mutableStateOf(false) }
     var showFilter by remember { mutableStateOf(false) }
     val forumFilter = com.decentespresso.dcamp.ui.LocalForumFilter.current
@@ -90,21 +97,42 @@ fun ThreadListView(board: Board, session: SessionStore.State) {
         if (loading) return
         loading = true
         try {
-            val offset = if (reset) 0 else rows.size
+            val offset = if (reset) 0 else fetched
             val params = buildMap {
                 put("project_id", board.id.toString()); put("offset", offset.toString()); put("limit", "30")
                 if (isProblems && statusFilter != "all") put("status", statusFilter)
                 putAll(forumFilter.messageParams)
             }
             val page = runCatching { Services.api.messagesPage(params) }.getOrNull() ?: return
-            if (reset) { rows.clear(); rows.addAll(page.messages) } else rows.addAll(page.messages)
+            // The list is in latest-activity order, so a thread that got a reply since the last
+            // page shifts the rest down and the next page repeats a row: skip those (duplicate
+            // LazyColumn keys crash), but count them in the server offset.
+            if (reset) { rows.clear(); rows.addAll(page.messages); listState.scrollToItem(0) }
+            else { val have = rows.mapTo(HashSet()) { it.id }; rows.addAll(page.messages.filter { it.id !in have }) }
+            fetched = offset + page.messages.size
             total = page.total ?: rows.size
+            loadedFilter = "$statusFilter ${forumFilter.messageParams}"
         } finally { loading = false }
     }
 
-    androidx.compose.runtime.LaunchedEffect(board.id, statusFilter) { load(reset = true) }
+    /** Back from a thread: update the newest page's rows (reply counts, latest reply) in place,
+     *  without adding or removing rows, so the scroll position and paging offset stay put. */
+    suspend fun refreshInPlace() {
+        val params = buildMap {
+            put("project_id", board.id.toString()); put("offset", "0"); put("limit", "30")
+            if (isProblems && statusFilter != "all") put("status", statusFilter)
+            putAll(forumFilter.messageParams)
+        }
+        val page = runCatching { Services.api.messagesPage(params) }.getOrNull() ?: return
+        val fresh = page.messages.associateBy { it.id }
+        rows.forEachIndexed { i, r -> fresh[r.id]?.let { if (it != r) rows[i] = it } }
+    }
 
-    LazyColumn(Modifier.fillMaxWidth().background(c.bg), contentPadding = androidx.compose.foundation.layout.PaddingValues(18.dp)) {
+    androidx.compose.runtime.LaunchedEffect(board.id, statusFilter) {
+        if (rows.isNotEmpty() && loadedFilter == "$statusFilter ${forumFilter.messageParams}") refreshInPlace() else load(reset = true)
+    }
+
+    LazyColumn(Modifier.fillMaxWidth().background(c.bg), state = listState, contentPadding = androidx.compose.foundation.layout.PaddingValues(18.dp)) {
         item {
             Row(Modifier.fillMaxWidth().padding(bottom = 14.dp), verticalAlignment = Alignment.CenterVertically) {
                 Box(Modifier.size(32.dp).clip(RoundedCornerShape(8.dp)).background(hexColor(board.color) ?: c.accent),
@@ -154,11 +182,11 @@ fun ThreadListView(board: Board, session: SessionStore.State) {
                     router.push(Dest.Thread(row.id))
                 }
                 Divider(color = c.line)
-                if (idx == rows.lastIndex && rows.size < total) {
+                if (idx == rows.lastIndex && fetched < total) {
                     androidx.compose.runtime.LaunchedEffect(rows.size) { load(reset = false) }
                 }
             }
-            if (loading && rows.size < total) {
+            if (loading && fetched < total) {
                 item { Box(Modifier.fillMaxWidth().padding(16.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator(color = c.accent) } }
             }
         }

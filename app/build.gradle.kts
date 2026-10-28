@@ -19,8 +19,8 @@ android {
         applicationId = "com.decentespresso.dcamp"
         minSdk = 26
         targetSdk = 35
-        versionCode = 8
-        versionName = "0.4.2"
+        versionCode = 9
+        versionName = "0.4.3"
         vectorDrawables { useSupportLibrary = true }
     }
 

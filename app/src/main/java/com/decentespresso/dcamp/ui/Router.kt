@@ -1,8 +1,10 @@
 package com.decentespresso.dcamp.ui
 
+import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.staticCompositionLocalOf
 import com.decentespresso.dcamp.api.DcampRoute
@@ -31,9 +33,14 @@ class Router {
     var personID: Int? by mutableStateOf(null)
     var threadSiblings: List<Int> = emptyList()
 
-    fun push(dest: Dest) { backStack.add(dest) }
-    fun pop() { if (backStack.isNotEmpty()) backStack.removeAt(backStack.lastIndex) }
-    fun popToRoot() { backStack.clear() }
+    /** Per-screen state kept while that screen is in the back stack (see [rememberRetained]),
+     *  keyed by depth: 0 = forums home, n = backStack[n-1]. Dropped when the screen is popped. */
+    private val retained = mutableMapOf<Int, MutableMap<String, Any?>>()
+    fun retainedAt(depth: Int): MutableMap<String, Any?> = retained.getOrPut(depth) { mutableMapOf() }
+
+    fun push(dest: Dest) { backStack.add(dest); retained.remove(backStack.size) }
+    fun pop() { if (backStack.isNotEmpty()) { retained.remove(backStack.size); backStack.removeAt(backStack.lastIndex) } }
+    fun popToRoot() { backStack.clear(); retained.keys.retainAll { it == 0 } }
 
     fun open(routeToken: String?) {
         val pid = DcampRoute.personID(routeToken)
@@ -48,3 +55,17 @@ class Router {
 }
 
 val LocalRouter = staticCompositionLocalOf<Router> { error("Router not provided") }
+
+/** The current screen's retained-state map, provided by MainView per back-stack depth. */
+val LocalRetained = staticCompositionLocalOf<MutableMap<String, Any?>> { mutableMapOf() }
+
+/**
+ * Like `remember`, but the value survives the screen leaving composition while another screen
+ * is pushed over it, so going back finds its loaded rows and scroll position as they were.
+ */
+@Composable
+fun <T> rememberRetained(key: String, init: () -> T): T {
+    val store = LocalRetained.current
+    @Suppress("UNCHECKED_CAST")
+    return remember(store) { store.getOrPut(key) { init() } as T }
+}

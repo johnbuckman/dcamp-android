@@ -57,6 +57,7 @@ import com.decentespresso.dcamp.api.derekSearchStart
 import com.decentespresso.dcamp.ui.Dest
 import com.decentespresso.dcamp.ui.LocalRouter
 import com.decentespresso.dcamp.ui.T
+import com.decentespresso.dcamp.ui.rememberRetained
 import com.decentespresso.dcamp.ui.theme.Avatar
 import com.decentespresso.dcamp.ui.theme.MachineBadge
 import com.decentespresso.dcamp.ui.theme.DcampTheme
@@ -72,31 +73,38 @@ fun SearchView() {
     val c = DcampTheme.colors
     val router = LocalRouter.current
     val scope = rememberCoroutineScope()
-    var query by remember { mutableStateOf("") }
-    var response by remember { mutableStateOf(SearchResponse()) }
+    var query by rememberRetained("query") { mutableStateOf("") }
+    var response by rememberRetained("response") { mutableStateOf(SearchResponse()) }
     var searching by remember { mutableStateOf(false) }
-    var types by remember { mutableStateOf(setOf("messages", "comments", "chat", "pings")) }
-    var derekAnswer by remember { mutableStateOf<String?>(null) }
+    var types by rememberRetained("types") { mutableStateOf(setOf("messages", "comments", "chat", "pings")) }
+    var derekAnswer by rememberRetained("derekAnswer") { mutableStateOf<String?>(null) }
     var derekLoading by remember { mutableStateOf(false) }
 
-    var sortNewest by remember { mutableStateOf(false) }
-    var showWeak by remember { mutableStateOf(false) }        // weak-relevance tail expanded ("Show N more results…")
-    var selectedForum by remember { mutableStateOf<Int?>(null) }
-    var expertsOnly by remember { mutableStateOf(false) }     // all members by default; experts is opt-in
-    var showAllPeople by remember { mutableStateOf(false) }   // People capped at PEOPLE_CAP rows so results stay in view
+    var sortNewest by rememberRetained("sortNewest") { mutableStateOf(false) }
+    var showWeak by rememberRetained("showWeak") { mutableStateOf(false) }        // weak-relevance tail expanded ("Show N more results…")
+    var selectedForum by rememberRetained("selectedForum") { mutableStateOf<Int?>(null) }
+    var expertsOnly by rememberRetained("expertsOnly") { mutableStateOf(false) }     // all members by default; experts is opt-in
+    var showAllPeople by rememberRetained("showAllPeople") { mutableStateOf(false) }   // People capped at PEOPLE_CAP rows so results stay in view
     var sortMenu by remember { mutableStateOf(false) }
 
     val terms = remember(query) { query.lowercase().split(" ").filter { it.length >= 2 } }
 
+    // Back from a result: the retained results are still showing, so don't search again
+    // (that would also clear Derek's answer and the facet choices).
+    var searchedFor by rememberRetained("searchedFor") { mutableStateOf<String?>(null) }
+    val listState = rememberRetained("list") { androidx.compose.foundation.lazy.LazyListState() }
+
     // Debounced search on query/types change.
     LaunchedEffect(query, types) {
+        if (searchedFor == "$query $types") return@LaunchedEffect
         derekAnswer = null; derekLoading = false
-        if (query.trim().length < 2) { response = SearchResponse(); return@LaunchedEffect }
+        if (query.trim().length < 2) { response = SearchResponse(); searchedFor = null; return@LaunchedEffect }
         delay(300)
         searching = true
         val t = if (types.isEmpty()) "messages,comments,chat,pings" else types.joinToString(",")
         response = runCatching { Services.api.search(query, t, 0) }.getOrDefault(SearchResponse())
         selectedForum = null; showWeak = false; showAllPeople = false
+        searchedFor = "$query $types"
         searching = false
     }
 
@@ -175,7 +183,7 @@ fun SearchView() {
             }
         }
 
-        LazyColumn(Modifier.fillMaxSize(), contentPadding = androidx.compose.foundation.layout.PaddingValues(16.dp)) {
+        LazyColumn(Modifier.fillMaxSize(), state = listState, contentPadding = androidx.compose.foundation.layout.PaddingValues(16.dp)) {
             if (query.length >= 2) {
                 item {
                     Column(Modifier.fillMaxWidth().padding(bottom = 10.dp)) {
