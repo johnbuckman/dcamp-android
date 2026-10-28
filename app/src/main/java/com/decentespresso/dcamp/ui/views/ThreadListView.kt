@@ -38,6 +38,21 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.text.InlineTextContent
+import androidx.compose.foundation.text.appendInlineContent
+import androidx.compose.ui.layout.Layout
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.Placeholder
+import androidx.compose.ui.text.PlaceholderVerticalAlign
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.rememberTextMeasurer
+import androidx.compose.ui.unit.Constraints
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
@@ -176,39 +191,118 @@ private fun StatusPill(title: String, active: Boolean, onClick: () -> Unit) {
 @Composable
 private fun ThreadRowView(row: MessageRow, onClick: () -> Unit) {
     val c = DcampTheme.colors
-    Row(
-        Modifier.fillMaxWidth().clickable { onClick() }.padding(horizontal = 14.dp, vertical = 14.dp),
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
-        verticalAlignment = Alignment.Top,
-    ) {
+    val thumbSize = 52.dp
+    val gap = 12.dp
+    val pic: @Composable () -> Unit = {
         val thumb = row.thumbUrl
         if (thumb != null) {
             AsyncImage(model = thumb, contentDescription = null, contentScale = ContentScale.Crop,
-                modifier = Modifier.size(52.dp).clip(RoundedCornerShape(8.dp)).background(c.line))
+                modifier = Modifier.size(thumbSize).clip(RoundedCornerShape(8.dp)).background(c.line))
         } else {
-            Avatar(person = row.author, size = 52.dp)
+            Avatar(person = row.author, size = thumbSize)
         }
-        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                if (row.isPinned) Icon(Icons.Filled.PushPin, contentDescription = null, tint = Color(0xFFFF9800), modifier = Modifier.size(14.dp))
-                Text(row.displaySubject, fontSize = 18.sp, fontWeight = FontWeight.Bold, color = c.ink,
-                    modifier = Modifier.weight(1f, fill = false))
-                row.categoryName?.takeIf { it.isNotEmpty() }?.let { CategoryPill(it) }
-            }
-            if (row.displayPreview.isNotEmpty()) {
-                Text(row.displayPreview, fontSize = 15.sp, color = c.inkSoft, maxLines = 1)
-            }
-            row.recentCommentText?.let { PlainText.strip(it) }?.takeIf { it.isNotEmpty() }?.let { rc ->
+    }
+    val details: List<@Composable () -> Unit> = buildList {
+        row.categoryName?.takeIf { it.isNotEmpty() }?.let { add { CategoryPill(it) } }
+        if (row.displayPreview.isNotEmpty()) {
+            add { Text(row.displayPreview, fontSize = 15.sp, color = c.inkSoft, maxLines = 1) }
+        }
+        row.recentCommentText?.let { PlainText.strip(it) }?.takeIf { it.isNotEmpty() }?.let { rc ->
+            add {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                     Icon(Icons.AutoMirrored.Filled.ReplyAll, contentDescription = null, tint = c.muted, modifier = Modifier.size(13.dp))
                     Text(rc, fontSize = 13.sp, color = c.muted, maxLines = 1)
                 }
             }
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                AuthorLine(person = row.author, date = row.createdAt)
-                val n = row.commentCount ?: 0
-                if (n > 0) Text("· $n 💬", fontSize = 13.sp, color = c.muted)
+        }
+        add {
+            val n = row.commentCount ?: 0
+            AuthorLine(person = row.author, date = row.createdAt) {
+                if (n > 0) Text("· $n 💬", fontSize = 13.sp, color = c.muted, softWrap = false)
             }
+        }
+    }
+    BoxWithConstraints(Modifier.fillMaxWidth().clickable { onClick() }.padding(horizontal = 14.dp, vertical = 14.dp)) {
+        if (maxWidth >= FLOAT_THUMB_BELOW) {
+            Row(horizontalArrangement = Arrangement.spacedBy(gap), verticalAlignment = Alignment.Top) {
+                pic()
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    ThreadTitle(row, narrowWidth = null, beside = 0.dp)
+                    details.forEach { it() }
+                }
+            }
+        } else {
+            // Phones: the picture floats top-right and the title wraps around it, so the
+            // title isn't confined to a slim column beside the picture.
+            FloatRightLayout(thumbSize, gap, 6.dp, pic) {
+                ThreadTitle(row, narrowWidth = maxWidth - thumbSize - gap, beside = thumbSize)
+                details.forEach { it() }
+            }
+        }
+    }
+}
+
+private val FLOAT_THUMB_BELOW = 560.dp
+
+/** Thread title. With [narrowWidth], the lines that start beside the floated picture
+ *  (the top [beside] of the block) are laid out at that width, the rest at full width. */
+@Composable
+private fun ThreadTitle(row: MessageRow, narrowWidth: Dp?, beside: Dp) {
+    val c = DcampTheme.colors
+    val style = TextStyle(fontSize = 18.sp, fontWeight = FontWeight.Bold, color = c.ink)
+    val pinId = "pin"
+    val pinSize = 14.sp
+    val text = buildAnnotatedString {
+        if (row.isPinned) { appendInlineContent(pinId, "📌"); append(" ") }
+        append(row.displaySubject)
+    }
+    val placeholders = if (row.isPinned)
+        listOf(AnnotatedString.Range(Placeholder(pinSize, pinSize, PlaceholderVerticalAlign.TextCenter), 0, 1))
+    else emptyList()
+    val inline = mapOf(pinId to InlineTextContent(Placeholder(pinSize, pinSize, PlaceholderVerticalAlign.TextCenter)) {
+        Icon(Icons.Filled.PushPin, contentDescription = null, tint = Color(0xFFFF9800), modifier = Modifier.fillMaxSize())
+    })
+    if (narrowWidth == null) {
+        Text(text, style = style, inlineContent = inline)
+        return
+    }
+    val measurer = rememberTextMeasurer()
+    val density = LocalDensity.current
+    val split = remember(text, narrowWidth, beside, density) {
+        val layout = measurer.measure(text, style, placeholders = placeholders,
+            constraints = Constraints(maxWidth = with(density) { narrowWidth.roundToPx() }), density = density)
+        val besidePx = with(density) { beside.toPx() }
+        val n = (0 until layout.lineCount).count { layout.getLineTop(it) < besidePx }.coerceAtLeast(1)
+        if (n >= layout.lineCount) text.length else layout.getLineEnd(n - 1)
+    }
+    Column {
+        Text(text.subSequence(0, split), style = style, inlineContent = inline, modifier = Modifier.width(narrowWidth))
+        val rest = text.text.substring(split).trimStart()
+        if (rest.isNotEmpty()) Text(rest, style = style)
+    }
+}
+
+/** [pic] pinned top-right; [content] children stack with [spacing], narrowed to clear the
+ *  picture while they start beside it. The first child (the title) handles its own split. */
+@Composable
+private fun FloatRightLayout(picSize: Dp, gap: Dp, spacing: Dp, pic: @Composable () -> Unit, content: @Composable () -> Unit) {
+    Layout(contents = listOf(pic, content)) { (picM, items), constraints ->
+        val full = constraints.maxWidth
+        val picPx = picSize.roundToPx()
+        val narrow = full - picPx - gap.roundToPx()
+        val p = picM.map { it.measure(Constraints.fixed(picPx, picPx)) }
+        var y = 0
+        val placed = items.mapIndexed { i, m ->
+            val w = if (i > 0 && y < picPx) narrow else full
+            val pl = m.measure(Constraints(maxWidth = w))
+            val at = y
+            y += pl.height + spacing.roundToPx()
+            pl to at
+        }
+        val h = maxOf(y - spacing.roundToPx(), picPx)
+        layout(full, h) {
+            p.forEach { it.place(full - picPx, 0) }
+            placed.forEach { (pl, at) -> pl.place(0, at) }
         }
     }
 }

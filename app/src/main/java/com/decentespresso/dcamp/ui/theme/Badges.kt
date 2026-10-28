@@ -66,7 +66,7 @@ fun DecentBadge(person: Person?) {
 /** Author line used on posts/comments/chat: name + DECENT + machine + date. Wraps on narrow screens. */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-fun AuthorLine(person: Person?, date: Int? = null, tappable: Boolean = true) {
+fun AuthorLine(person: Person?, date: Int? = null, tappable: Boolean = true, trailing: @Composable () -> Unit = {}) {
     val c = DcampTheme.colors
     val router = LocalRouter.current
     FlowRow(
@@ -86,5 +86,6 @@ fun AuthorLine(person: Person?, date: Int? = null, tappable: Boolean = true) {
         if (date != null) {
             Text("· ${RelativeTime.string(date)}", color = c.muted, fontSize = 13.sp)
         }
+        trailing()
     }
 }
