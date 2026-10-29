@@ -27,18 +27,23 @@ import com.decentespresso.dcamp.api.AppConfig
 import com.decentespresso.dcamp.api.UpdateInfo
 import com.decentespresso.dcamp.api.Updater
 import com.decentespresso.dcamp.ui.T
+import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.launch
 
 private const val IDLE = 0
 private const val PROMPT = 1
 private const val DOWNLOADING = 2
 private const val FAILED = 3
-private const val WEEK_MS = 7L * 24 * 60 * 60 * 1000
+private const val CHECKING = 4
+private const val UP_TO_DATE = 5
+private const val UNREACHABLE = 6
+private const val DAY_MS = 24L * 60 * 60 * 1000
 
 /**
  * On launch, checks GitHub for a newer release; if found (and not already dismissed), offers to
- * download + install it. "Later" suppresses that version until a newer one appears. The sideload
- * counterpart of the iOS SideStep auto-update.
+ * download + install it. "Later" suppresses that version until a newer one appears. "Check for
+ * update" in the account menu runs the same check on demand and also says when you're up to date.
+ * The sideload counterpart of the iOS SideStep auto-update.
  */
 @Composable
 fun UpdateGate() {
@@ -61,8 +66,9 @@ fun UpdateGate() {
         else { pendingApk = f; permLauncher.launch(Updater.unknownSourcesSettings(ctx)) }
     }
 
-    // Check when the app comes to the foreground, throttled to at most once a week (and skipped
-    // while offline, so a missed week retries on the next resume rather than burning the window).
+    // Check when the app comes to the foreground, throttled to at most once a day. Only a check
+    // GitHub actually answered counts (Updater.check records it), so being offline or a failed
+    // request retries on the next resume rather than burning the day.
     val lifecycleOwner = androidx.compose.ui.platform.LocalLifecycleOwner.current
     androidx.compose.runtime.DisposableEffect(lifecycleOwner) {
         val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
@@ -70,8 +76,7 @@ fun UpdateGate() {
                 scope.launch {
                     val now = System.currentTimeMillis()
                     if (com.decentespresso.dcamp.api.Services.connectivity.isOnline.value &&
-                        now - AppConfig.lastUpdateCheck >= WEEK_MS) {
-                        AppConfig.lastUpdateCheck = now
+                        now - AppConfig.lastUpdateCheck >= DAY_MS) {
                         Updater.check()?.let { info = it; phase = PROMPT }
                     }
                 }
@@ -81,8 +86,41 @@ fun UpdateGate() {
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
 
-    val i = info
-    if (i == null || phase == IDLE) return
+    // Manual check from the account menu: ignores the daily throttle and a dismissed version.
+    LaunchedEffect(Unit) {
+        Updater.manualRequests.drop(1).collect {
+            if (phase == DOWNLOADING) return@collect
+            phase = CHECKING
+            val latest = Updater.latest()
+            info = latest
+            phase = when {
+                latest == null -> UNREACHABLE
+                Updater.isNewer(latest) -> PROMPT
+                else -> UP_TO_DATE
+            }
+        }
+    }
+
+    if (phase == IDLE) return
+    if (phase == CHECKING || phase == UP_TO_DATE || phase == UNREACHABLE) {
+        AlertDialog(
+            onDismissRequest = { phase = IDLE },
+            title = { Text(T("Check for update")) },
+            text = {
+                Text(when (phase) {
+                    CHECKING -> T("Checking…")
+                    UP_TO_DATE -> T("You have the latest version ({cur}).",
+                        "cur" to com.decentespresso.dcamp.BuildConfig.VERSION_NAME)
+                    else -> T("Couldn’t check for updates. Please try again later.")
+                })
+            },
+            confirmButton = {
+                if (phase != CHECKING) TextButton(onClick = { phase = IDLE }) { Text(T("OK")) }
+            },
+        )
+        return
+    }
+    val i = info ?: return
 
     AlertDialog(
         onDismissRequest = { if (phase != DOWNLOADING) phase = IDLE },

@@ -220,7 +220,17 @@ private fun TopBar(session: SessionStore, state: SessionStore.State, showBack: B
             }
         }
         Spacer(Modifier.width(14.dp))
-        Avatar(person = state.me, size = 28.dp, onClick = { router.push(Dest.Settings) })
+        // Account menu, like the web's picture menu: My settings, and Check for update.
+        var accountMenu by remember { androidx.compose.runtime.mutableStateOf(false) }
+        Box {
+            Avatar(person = state.me, size = 28.dp, onClick = { accountMenu = true })
+            androidx.compose.material3.DropdownMenu(expanded = accountMenu, onDismissRequest = { accountMenu = false }) {
+                androidx.compose.material3.DropdownMenuItem(text = { Text(T("My settings")) },
+                    onClick = { accountMenu = false; router.push(Dest.Settings) })
+                androidx.compose.material3.DropdownMenuItem(text = { Text(T("Check for update")) },
+                    onClick = { accountMenu = false; com.decentespresso.dcamp.api.Updater.manualRequests.value++ })
+            }
+        }
     }
 }
 

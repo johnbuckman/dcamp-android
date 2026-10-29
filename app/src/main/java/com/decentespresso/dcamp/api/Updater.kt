@@ -5,6 +5,7 @@ import android.content.Intent
 import androidx.core.content.FileProvider
 import com.decentespresso.dcamp.BuildConfig
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -23,9 +24,22 @@ object Updater {
     private const val LATEST = "https://api.github.com/repos/johnbuckman/dcamp-android/releases/latest"
     private val client = OkHttpClient()
 
+    /** Bumped by "Check for update" in the account menu; UpdateGate runs a check that ignores
+     *  the daily throttle and the dismissed version, and reports "up to date" too. */
+    val manualRequests = MutableStateFlow(0)
+
     /** Latest release info if it's newer than this build and not the version the user dismissed;
      *  null otherwise (including on any network/parse error). Safe on any dispatcher. */
-    suspend fun check(): UpdateInfo? = withContext(Dispatchers.IO) {
+    suspend fun check(): UpdateInfo? {
+        val latest = latest() ?: return null
+        if (!isNewer(latest.version, BuildConfig.VERSION_NAME) || latest.version == AppConfig.dismissedUpdate) return null
+        return latest
+    }
+
+    /** The repo's latest release (whatever its version), or null on any network/parse error or if
+     *  it has no APK. Records AppConfig.lastUpdateCheck only once GitHub has answered, so failures
+     *  retry. Safe on any dispatcher. */
+    suspend fun latest(): UpdateInfo? = withContext(Dispatchers.IO) {
         try {
             val req = Request.Builder().url(LATEST)
                 .header("Accept", "application/vnd.github+json")
@@ -35,10 +49,9 @@ object Updater {
                 r.body?.string()
             } ?: return@withContext null
             val json = JSONObject(body)
+            AppConfig.lastUpdateCheck = System.currentTimeMillis()
             val tag = json.optString("tag_name").removePrefix("v")
-            if (tag.isEmpty() || !isNewer(tag, BuildConfig.VERSION_NAME) || tag == AppConfig.dismissedUpdate) {
-                return@withContext null
-            }
+            if (tag.isEmpty()) return@withContext null
             val assets = json.optJSONArray("assets") ?: return@withContext null
             var url: String? = null
             var size = 0L
@@ -54,6 +67,9 @@ object Updater {
             null
         }
     }
+
+    /** True if [info] is newer than the installed build. */
+    fun isNewer(info: UpdateInfo): Boolean = isNewer(info.version, BuildConfig.VERSION_NAME)
 
     /** Download the APK into cacheDir/updates, reporting 0f..1f progress. Returns the file or null. */
     suspend fun download(ctx: Context, info: UpdateInfo, onProgress: (Float) -> Unit): File? =

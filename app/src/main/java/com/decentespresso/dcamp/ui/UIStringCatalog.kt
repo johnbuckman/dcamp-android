@@ -297,5 +297,15 @@ object UIStringCatalog {
         "{n} comment",
         "{n} comments",
         "“Experts only” narrows people to recognised experts.",
+        "Check for update",
+        "Checking…",
+        "You have the latest version ({cur}).",
+        "Couldn’t check for updates. Please try again later.",
+        "Update available",
+        "You have version {cur}, version {new} is available.",
+        "Download failed. Please try again later.",
+        "Update",
+        "Later",
+        "Retry",
     )
 }
