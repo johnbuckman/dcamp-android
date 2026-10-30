@@ -13,7 +13,9 @@ import kotlinx.serialization.encodeToString
 
 suspend fun DcampApi.messagesPage(params: Map<String, String>): MessagesPage = call("messages", params)
 
-suspend fun DcampApi.messageDetail(id: Int): MessageResponse = call("message", mapOf("id" to id.toString()))
+/** all=true asks for every comment of a long thread (otherwise >20 comments come back collapsed). */
+suspend fun DcampApi.messageDetail(id: Int, all: Boolean = false): MessageResponse =
+    call("message", if (all) mapOf("id" to id.toString(), "all" to "1") else mapOf("id" to id.toString()))
 
 // MARK: - Summaries
 

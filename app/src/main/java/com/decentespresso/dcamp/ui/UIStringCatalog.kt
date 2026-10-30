@@ -307,5 +307,9 @@ object UIStringCatalog {
         "Update",
         "Later",
         "Retry",
+        "About",
+        "Version {v} ({code})",
+        "Close",
+        "Load all messages",
     )
 }

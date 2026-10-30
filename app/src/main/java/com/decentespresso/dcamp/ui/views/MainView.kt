@@ -220,8 +220,9 @@ private fun TopBar(session: SessionStore, state: SessionStore.State, showBack: B
             }
         }
         Spacer(Modifier.width(14.dp))
-        // Account menu, like the web's picture menu: My settings, and Check for update.
+        // Account menu, like the web's picture menu: My settings, Check for update, About.
         var accountMenu by remember { androidx.compose.runtime.mutableStateOf(false) }
+        var showAbout by remember { androidx.compose.runtime.mutableStateOf(false) }
         Box {
             Avatar(person = state.me, size = 28.dp, onClick = { accountMenu = true })
             androidx.compose.material3.DropdownMenu(expanded = accountMenu, onDismissRequest = { accountMenu = false }) {
@@ -229,9 +230,45 @@ private fun TopBar(session: SessionStore, state: SessionStore.State, showBack: B
                     onClick = { accountMenu = false; router.push(Dest.Settings) })
                 androidx.compose.material3.DropdownMenuItem(text = { Text(T("Check for update")) },
                     onClick = { accountMenu = false; com.decentespresso.dcamp.api.Updater.manualRequests.value++ })
+                androidx.compose.material3.DropdownMenuItem(text = { Text(T("About")) },
+                    onClick = { accountMenu = false; showAbout = true })
             }
         }
+        if (showAbout) AboutDialog { showAbout = false }
     }
+}
+
+private const val SOURCE_URL = "https://github.com/johnbuckman/dcamp-android"
+
+/** Avatar menu → About: app name, version, source link and a shortcut to Check for update. */
+@Composable
+private fun AboutDialog(onDismiss: () -> Unit) {
+    val c = DcampTheme.colors
+    val uriHandler = androidx.compose.ui.platform.LocalUriHandler.current
+    androidx.compose.material3.AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = c.panel,
+        title = { Text(T("dcamp"), color = c.ink, fontWeight = FontWeight.Black) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text(T("Version {v} ({code})",
+                    "v" to com.decentespresso.dcamp.BuildConfig.VERSION_NAME,
+                    "code" to com.decentespresso.dcamp.BuildConfig.VERSION_CODE.toString()),
+                    color = c.inkSoft, fontSize = 15.sp)
+                Text(SOURCE_URL.removePrefix("https://"), color = c.link, fontSize = 15.sp,
+                    textDecoration = androidx.compose.ui.text.style.TextDecoration.Underline,
+                    modifier = Modifier.clickable { runCatching { uriHandler.openUri(SOURCE_URL) } })
+            }
+        },
+        confirmButton = {
+            androidx.compose.material3.TextButton(onClick = onDismiss) { Text(T("Close"), color = c.accent) }
+        },
+        dismissButton = {
+            androidx.compose.material3.TextButton(onClick = {
+                onDismiss(); com.decentespresso.dcamp.api.Updater.manualRequests.value++
+            }) { Text(T("Check for update"), color = c.inkSoft) }
+        },
+    )
 }
 
 @Composable

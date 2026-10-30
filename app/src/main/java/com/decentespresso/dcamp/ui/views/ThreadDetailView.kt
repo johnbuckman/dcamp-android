@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -34,6 +35,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.onPlaced
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
@@ -54,6 +56,7 @@ import com.decentespresso.dcamp.api.offtopicSuggest
 import com.decentespresso.dcamp.api.commentDelete
 import com.decentespresso.dcamp.ui.LocalRouter
 import com.decentespresso.dcamp.ui.T
+import com.decentespresso.dcamp.ui.rememberRetained
 import com.decentespresso.dcamp.ui.theme.Avatar
 import com.decentespresso.dcamp.ui.theme.AuthorLine
 import com.decentespresso.dcamp.ui.theme.DcampTheme
@@ -69,15 +72,32 @@ fun ThreadDetailView(messageID: Int, session: SessionStore.State) {
     val c = DcampTheme.colors
     val router = LocalRouter.current
     val scope = rememberCoroutineScope()
-    var currentID by remember(messageID) { mutableIntStateOf(messageID) }
-    var message by remember { mutableStateOf<MessageDetail?>(null) }
-    val comments = remember { androidx.compose.runtime.mutableStateListOf<Comment>() }
-    var lastVisit by remember { mutableStateOf<Int?>(null) }
+    // Retained (not plain remember) so going back to this thread from a screen pushed over it
+    // finds its comments and scroll position as they were, and doesn't re-jump to first-unread.
+    var currentID by rememberRetained("cur") { mutableIntStateOf(messageID) }
+    var message by rememberRetained("msg") { mutableStateOf<MessageDetail?>(null) }
+    val comments = rememberRetained("comments") { androidx.compose.runtime.mutableStateListOf<Comment>() }
+    var lastVisit by rememberRetained("lastVisit") { mutableStateOf<Int?>(null) }
+    // Thread whose lastVisit we hold: every `message` fetch (incl. the 3s poll) stamps a new
+    // visit, so only the FIRST response for a thread carries the real previous visit.
+    var lastVisitFor by rememberRetained("lastVisitFor") { mutableStateOf<Int?>(null) }
+    // Long-thread collapse (>20 comments: server sends head + tail, total = real count).
+    var showAll by rememberRetained("showAll") { mutableStateOf(false) }
+    var collapsedTotal by rememberRetained("collapsedTotal") { mutableStateOf<Int?>(null) }
+    var collapsedHead by rememberRetained("collapsedHead") { mutableIntStateOf(10) }
+    var loadingAll by remember { mutableStateOf(false) }
+    // Thread we've already opened at its first unread comment (only once per thread).
+    var jumpedFor by rememberRetained("jumpedFor") { mutableStateOf<Int?>(null) }
     var loading by remember { mutableStateOf(false) }
     val composerModel = remember(currentID) { ComposerModel() }
     var editMode by remember { mutableStateOf<ComposeMode?>(null) }
     var offtopicCommentID by remember { mutableStateOf<Int?>(null) }
-    val listState = androidx.compose.foundation.lazy.rememberLazyListState()
+    val listState = rememberRetained("list") { androidx.compose.foundation.lazy.LazyListState() }
+    // Scroll-to-first-unread plumbing: lazy index of the comments card (set while building the
+    // list) and the layout coordinates of the card and of the "New since your last visit" divider.
+    val commentsCardIndex = remember { intArrayOf(-1) }
+    val cardCoords = remember { arrayOfNulls<androidx.compose.ui.layout.LayoutCoordinates>(1) }
+    val unreadCoords = remember { arrayOfNulls<androidx.compose.ui.layout.LayoutCoordinates>(1) }
     // Quote a message/comment: buffer the web-parity quote into the composer and scroll it into
     // view (the composer is the last lazy item, so quoting the top-of-thread message must bring
     // it on-screen). src is the source permalink so "wrote:" links back to the original.
@@ -86,29 +106,60 @@ fun ThreadDetailView(messageID: Int, session: SessionStore.State) {
         scope.launch { listState.animateScrollToItem(Int.MAX_VALUE) }
     }
 
-    suspend fun load() {
+    fun applyCollapse(resp: com.decentespresso.dcamp.api.MessageResponse) {
+        if (resp.isCollapsed) { collapsedTotal = resp.total; collapsedHead = resp.head ?: 10 }
+        else collapsedTotal = null
+    }
+
+    /** True when a collapsed response's first unread comment could be in the hidden middle:
+     *  every head comment predates the last visit but the first tail comment doesn't. */
+    fun unreadInGap(resp: com.decentespresso.dcamp.api.MessageResponse, lv: Int?): Boolean {
+        if (!resp.isCollapsed || lv == null || lv <= 0) return false
+        val cs = resp.comments ?: return false
+        val head = resp.head ?: 10
+        if (head <= 0 || cs.size <= head || (resp.total ?: 0) <= cs.size) return false
+        return (cs[head - 1].createdAt ?: 0) <= lv && (cs[head].createdAt ?: 0) > lv
+    }
+
+    suspend fun load(): Boolean {
         loading = true
         try {
-            val resp = runCatching { Services.api.messageDetail(currentID) }.getOrNull() ?: return
+            var resp = runCatching { Services.api.messageDetail(currentID, showAll) }.getOrNull() ?: return false
+            val lv = if (lastVisitFor == currentID) lastVisit else resp.lastVisit
+            // Opening a long thread whose first unread comment would be hidden in the collapsed
+            // middle: fetch every comment instead, so the divider and the jump land on it.
+            if (unreadInGap(resp, lv)) {
+                runCatching { Services.api.messageDetail(currentID, all = true) }.getOrNull()?.let {
+                    resp = it; showAll = true
+                }
+            }
             message = resp.message
             comments.clear(); comments.addAll(resp.comments ?: emptyList())
-            lastVisit = resp.lastVisit
+            if (lastVisitFor != currentID) { lastVisit = lv; lastVisitFor = currentID }   // lv: first response's
+            applyCollapse(resp)
+            return true
         } finally { loading = false }
     }
 
-    // Load + live poll (new/streaming comments).
-    androidx.compose.runtime.LaunchedEffect(currentID) {
-        message = null; comments.clear()
-        load()
-        while (isActive) {
-            delay(3000)
-            val resp = runCatching { Services.api.messageDetail(currentID) }.getOrNull() ?: continue
-            val fresh = resp.comments ?: emptyList()
+    /** Poll for new/streaming comments. A collapsed thread merges by id (append-only): the
+     *  fresh response is head+tail again, so a plain replace would shuffle the window. */
+    suspend fun poll() {
+        val resp = runCatching { Services.api.messageDetail(currentID, showAll) }.getOrNull() ?: return
+        val fresh = resp.comments ?: emptyList()
+        if (resp.isCollapsed || collapsedTotal != null) {
+            val index = comments.withIndex().associate { (i, cm) -> cm.id to i }
+            for (cm in fresh) {
+                val i = index[cm.id]
+                if (i == null) comments.add(cm)
+                else if (comments[i].body != cm.body || comments[i].streaming != cm.streaming) comments[i] = cm
+            }
+            if (resp.isCollapsed) collapsedTotal = maxOf(resp.total ?: 0, comments.size)
+        } else {
             val changed = fresh.size != comments.size ||
                 fresh.zip(comments).any { (a, b) -> a.body != b.body || a.streaming != b.streaming }
             if (changed) { comments.clear(); comments.addAll(fresh) }
-            if (resp.message.boosts?.list?.size != message?.boosts?.list?.size) message = resp.message
         }
+        if (resp.message.boosts?.list?.size != message?.boosts?.list?.size) message = resp.message
     }
 
     // Prev/next across the board's ordered thread list.
@@ -122,11 +173,83 @@ fun ThreadDetailView(messageID: Int, session: SessionStore.State) {
         comments.filter { set.contains((it.authorCountry ?: "").uppercase()) }
     } else comments.toList()
     val firstUnread = lastVisit?.takeIf { it > 0 }?.let { lv -> visibleComments.firstOrNull { (it.createdAt ?: 0) > lv }?.id }
+    val firstUnreadNow by androidx.compose.runtime.rememberUpdatedState(firstUnread)
+    // Comments the server left out of a collapsed thread (0 when uncollapsed / all loaded).
+    val hiddenMiddle = maxOf(0, (collapsedTotal ?: 0) - comments.size)
+    val headBoundaryID = if (hiddenMiddle > 0 && collapsedHead > 0 && comments.size >= collapsedHead)
+        comments[collapsedHead - 1].id else null
+
+    /** Bring the "New since your last visit" divider to the top of the list (like iOS, which
+     *  scrolls to the first unread with anchor .top). All comments live in ONE lazy item (the
+     *  card), so the target is (card index, divider's y inside the card), read from layout
+     *  coordinates. Images above the divider load after the first layout and push it down, so
+     *  for a short while keep re-anchoring it, until the layout has been still for a moment or
+     *  the user starts dragging. */
+    suspend fun jumpToFirstUnread() = kotlinx.coroutines.coroutineScope {
+        if (firstUnreadNow == null) return@coroutineScope
+        val idx = commentsCardIndex[0].takeIf { it >= 0 } ?: return@coroutineScope
+        var userDragged = false
+        val watcher = launch {
+            listState.interactionSource.interactions.collect {
+                if (it is androidx.compose.foundation.interaction.DragInteraction.Start) userDragged = true
+            }
+        }
+        // Divider's distance below the top of the list content (null = not composed/visible).
+        fun dividerOffset(): Float? {
+            val card = cardCoords[0]; val div = unreadCoords[0]
+            if (card == null || div == null || !card.isAttached || !div.isAttached) return null
+            val item = listState.layoutInfo.visibleItemsInfo.firstOrNull { it.index == idx } ?: return null
+            return item.offset + card.localPositionOf(div, androidx.compose.ui.geometry.Offset.Zero).y
+        }
+        listState.scrollToItem(idx)   // compose the card so the divider gets laid out
+        val start = System.currentTimeMillis()
+        var lastMove = start
+        while (!userDragged && firstUnreadNow != null) {
+            androidx.compose.runtime.withFrameNanos { }
+            val now = System.currentTimeMillis()
+            if (now - lastMove > 1500 || now - start > 8000) break
+            val off = dividerOffset()
+            if (off == null) {
+                // Divider scrolled out of the composed window (big layout jump): re-measure.
+                val card = cardCoords[0]; val div = unreadCoords[0]
+                if (card != null && div != null && card.isAttached && div.isAttached) {
+                    listState.scrollToItem(idx, card.localPositionOf(div, androidx.compose.ui.geometry.Offset.Zero).y.toInt())
+                    lastMove = now
+                }
+            } else if (kotlin.math.abs(off) > 1f) {
+                // (near the end of the thread the list can't scroll that far: nothing consumed)
+                if (kotlin.math.abs(listState.scrollBy(off)) > 0.5f) lastMove = now
+            }
+        }
+        watcher.cancel()
+    }
+
+    // Load + live poll (new/streaming comments). Opening a thread (first time, or prev/next to
+    // another) scrolls to its first unread comment once; coming back to a retained thread
+    // just refreshes in place and keeps the scroll position.
+    androidx.compose.runtime.LaunchedEffect(currentID) {
+        if (message?.id != currentID) {
+            message = null; comments.clear()
+            showAll = false; collapsedTotal = null; collapsedHead = 10
+            listState.scrollToItem(0)
+        }
+        if (load() && jumpedFor != currentID) {
+            jumpedFor = currentID
+            delay(350)
+            jumpToFirstUnread()
+        }
+        while (isActive) {
+            delay(3000)
+            poll()
+        }
+    }
 
     Box(Modifier.fillMaxSize().background(c.bg)) {
         LazyColumn(state = listState, contentPadding = androidx.compose.foundation.layout.PaddingValues(18.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp)) {
-            item { SummarizeBar(SummaryKind.Thread(currentID)) }
+            var itemCount = 0   // lazy index of the next item, for commentsCardIndex
+            item { SummarizeBar(SummaryKind.Thread(currentID)) }; itemCount++
+            commentsCardIndex[0] = -1
             message?.let { m ->
                 item {
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -140,26 +263,36 @@ fun ThreadDetailView(messageID: Int, session: SessionStore.State) {
                                 modifier = Modifier.padding(8.dp).clickable(enabled = next != null) { next?.let { currentID = it } })
                         }
                     }
-                }
+                }; itemCount++
                 item { MessageCard(m, session, onChange = { scope.launch { load() } }, onDeleted = { router.pop() },
                     onEdit = { editMode = ComposeMode.EditThread(m) },
-                    onQuote = { quoteInto(m.html, m.author?.id, m.author?.name, "#/message/$currentID") }) }
+                    onQuote = { quoteInto(m.html, m.author?.id, m.author?.name, "#/message/$currentID") }) }; itemCount++
                 if (visibleComments.isNotEmpty()) {
                     item {
-                        Text(T(if (visibleComments.size == 1) "{n} comment" else "{n} comments", "n" to "${visibleComments.size}"),
+                        val shown = visibleComments.size + hiddenMiddle
+                        Text(T(if (shown == 1) "{n} comment" else "{n} comments", "n" to "$shown"),
                             fontSize = 16.sp, fontWeight = FontWeight.Bold, color = c.ink)
-                    }
-                    item {
-                        Column(Modifier.fillMaxWidth().dcCard().padding(4.dp)) {
+                    }; itemCount++
+                    commentsCardIndex[0] = itemCount
+                    item(key = "comments") {
+                        Column(Modifier.onPlaced { cardCoords[0] = it }.fillMaxWidth().dcCard().padding(4.dp)) {
                             visibleComments.forEach { cm ->
-                                if (cm.id == firstUnread) SinceLastVisitDivider()
+                                if (cm.id == firstUnread) {
+                                    Box(Modifier.onPlaced { unreadCoords[0] = it }) { SinceLastVisitDivider() }
+                                }
                                 CommentRow(cm, session, onChange = { scope.launch { load() } },
                                     onEdit = { editMode = ComposeMode.EditComment(cm) },
                                     onQuote = { quoteInto(cm.html, cm.author?.id, cm.author?.name, "#/message/$currentID?c=${cm.id}") })
                                 Divider(color = c.line)
+                                if (cm.id == headBoundaryID) {
+                                    LoadAllRow(hiddenMiddle, loadingAll) {
+                                        loadingAll = true; showAll = true
+                                        scope.launch { load(); loadingAll = false }
+                                    }
+                                }
                             }
                         }
-                    }
+                    }; itemCount++
                 }
                 item {
                     if (session.canPost) {
@@ -329,6 +462,23 @@ private fun ReadOnlyNotice() {
     Row(Modifier.fillMaxWidth().dcCard().padding(14.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
         Icon(Icons.Filled.Lock, contentDescription = null, tint = c.muted, modifier = Modifier.size(18.dp))
         Text(T("You have read-only access — posting is for current Decent machine owners."), fontSize = 13.sp, color = c.muted)
+    }
+}
+
+/** Between the head and tail of a collapsed long thread: fetch every comment (all=1). */
+@Composable
+private fun LoadAllRow(hidden: Int, busy: Boolean, onClick: () -> Unit) {
+    val c = DcampTheme.colors
+    Column {
+        Row(Modifier.fillMaxWidth().clickable(enabled = !busy) { onClick() }.padding(vertical = 12.dp),
+            horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
+            if (busy) {
+                CircularProgressIndicator(color = c.accent, strokeWidth = 2.dp, modifier = Modifier.size(14.dp))
+                Spacer(Modifier.size(8.dp))
+            }
+            Text(T("Load all messages") + " ($hidden)", fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = c.accentInk)
+        }
+        Divider(color = c.line)
     }
 }
 

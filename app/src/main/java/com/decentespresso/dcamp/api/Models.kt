@@ -199,7 +199,16 @@ data class MessageResponse(
     val lastVisit: Int? = null,
     val message: MessageDetail = MessageDetail(),
     val comments: List<Comment>? = null,
-)
+    // Long threads (>20 comments) come back COLLAPSED: only the first `head` + last `tail`
+    // comments, with `total` = the real count. Re-request with all=1 for every comment.
+    // A deep link (c=<cid>) is never collapsed. 0/1 ints, per the dcamp JSON convention.
+    val collapsed: Int? = null,
+    val total: Int? = null,
+    val head: Int? = null,
+    val tail: Int? = null,
+) {
+    val isCollapsed: Boolean get() = (collapsed ?: 0) != 0
+}
 
 // MARK: - Auth / envelope
 
