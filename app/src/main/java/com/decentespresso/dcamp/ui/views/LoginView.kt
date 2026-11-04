@@ -61,7 +61,7 @@ fun LoginView(session: SessionStore, state: SessionStore.State) {
         ) {
             Text("dcamp", fontSize = 26.sp, fontWeight = FontWeight.Black, color = c.ink)
 
-            Text("Welcome to the Decent Diaspora", fontSize = 21.sp, fontWeight = FontWeight.Black,
+            Text("Welcome to dcamp", fontSize = 21.sp, fontWeight = FontWeight.Black,
                 color = c.ink, textAlign = TextAlign.Center)
             Text("Sign in with your existing Decent support account.", fontSize = 15.sp,
                 color = c.inkSoft, textAlign = TextAlign.Center)

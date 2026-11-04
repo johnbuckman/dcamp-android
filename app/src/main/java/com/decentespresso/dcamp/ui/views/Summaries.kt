@@ -60,7 +60,7 @@ sealed class SummaryKind {
 }
 
 fun SummaryKind.label(): String = when (this) {
-    is SummaryKind.Home -> T("Diaspora summary")
+    is SummaryKind.Home -> T("dcamp summary")
     is SummaryKind.Forum -> name
     is SummaryKind.Thread -> T("Thread summary")
     is SummaryKind.Chat -> T("Chat summary")
